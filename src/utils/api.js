@@ -161,4 +161,91 @@ export const API = {
 	// Licensing
 	getTopLicenses: (limit = 20) =>
 		apiRequest('/licenses/top', { limit }),
+
+	// Customer Analytics
+	getCustomerLifetimeValue: (dateRange) =>
+		apiRequest('/customers/lifetime-value', formatDateRange(dateRange)),
+
+	getCustomerRetentionRate: (dateRange) =>
+		apiRequest('/customers/retention-rate', formatDateRange(dateRange)),
+
+	getCustomerChurnAnalysis: (dateRange) =>
+		apiRequest('/customers/churn-analysis', formatDateRange(dateRange)),
+
+	getCustomerSegmentation: (dateRange) =>
+		apiRequest('/customers/segmentation', formatDateRange(dateRange)),
+
+	getCustomerRFM: (dateRange) =>
+		apiRequest('/customers/rfm-analysis', formatDateRange(dateRange)),
+
+	getAverageOrderValue: (dateRange) =>
+		apiRequest('/customers/aov', formatDateRange(dateRange)),
+
+	getCustomerHealth: (dateRange) =>
+		apiRequest('/customers/health-score', formatDateRange(dateRange)),
+
+	// Product Performance
+	getTopProducts: (dateRange, limit = 10) =>
+		apiRequest('/products/top', { ...formatDateRange(dateRange), limit }),
+
+	getProductRevenueTrend: (productId, dateRange) =>
+		apiRequest('/products/revenue-trend', { product_id: productId, ...formatDateRange(dateRange) }),
+
+	getProductConversionRates: (dateRange) =>
+		apiRequest('/products/conversion-rates', formatDateRange(dateRange)),
+
+	getProductBundleAnalysis: (dateRange) =>
+		apiRequest('/products/bundle-analysis', formatDateRange(dateRange)),
+
+	getProductSeasonality: (productId) =>
+		apiRequest('/products/seasonality', { product_id: productId }),
+
+	// Revenue Analytics
+	getRevenueBySource: (dateRange) =>
+		apiRequest('/revenue/by-source', formatDateRange(dateRange)),
+
+	getRevenueByProduct: (dateRange) =>
+		apiRequest('/revenue/by-product', formatDateRange(dateRange)),
+
+	getRevenueByCustomerType: (dateRange) =>
+		apiRequest('/revenue/by-customer-type', formatDateRange(dateRange)),
+
+	getRecurringRevenue: (dateRange) =>
+		apiRequest('/revenue/recurring-breakdown', formatDateRange(dateRange)),
+
+	getRevenueGrowthRate: (dateRange) =>
+		apiRequest('/revenue/growth-rate', formatDateRange(dateRange)),
+
+	// Financial Metrics
+	getARPU: (dateRange) =>
+		apiRequest('/metrics/arpu', formatDateRange(dateRange)),
+
+	getCustomerAcquisitionCost: (dateRange) =>
+		apiRequest('/metrics/cac', formatDateRange(dateRange)),
+
+	getLTVtoCACRatio: (dateRange) =>
+		apiRequest('/metrics/ltv-cac-ratio', formatDateRange(dateRange)),
+
+	getGrossMargin: (dateRange) =>
+		apiRequest('/metrics/gross-margin', formatDateRange(dateRange)),
+
+	getNetRevenueRetention: (dateRange) =>
+		apiRequest('/metrics/net-revenue-retention', formatDateRange(dateRange)),
+
+	// Predictive Analytics
+	getRevenueProjection: (months = 12) =>
+		apiRequest('/predictive/revenue-projection', { months }),
+
+	getChurnPrediction: () =>
+		apiRequest('/predictive/churn-prediction'),
+
+	getLTVPrediction: () =>
+		apiRequest('/predictive/ltv-prediction'),
+
+	// Payment Analytics
+	getPaymentMethods: (dateRange) =>
+		apiRequest('/payments/methods', formatDateRange(dateRange)),
+
+	getPaymentFailures: (dateRange) =>
+		apiRequest('/payments/failures', formatDateRange(dateRange)),
 };

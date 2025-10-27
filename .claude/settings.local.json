@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "mcp__playwright__browser_navigate"
+      "mcp__playwright__browser_navigate",
+      "mcp__chrome-mcp-stdio__chrome_navigate"
     ],
     "deny": [],
     "ask": []

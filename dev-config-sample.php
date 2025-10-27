@@ -31,7 +31,7 @@ define( 'VGP_EDD_STATS_DEV_MODE', true );
  * These should match your local MySQL configuration.
  * Default Local WP settings are shown below.
  */
-define( 'VGP_EDD_DEV_DB_HOST', 'localhost' );
+define( 'VGP_EDD_DEV_DB_HOST', '127.0.0.1' );
 define( 'VGP_EDD_DEV_DB_NAME', 'vgp_edd_dev' );
 define( 'VGP_EDD_DEV_DB_USER', 'root' );
 define( 'VGP_EDD_DEV_DB_PASSWORD', 'root' );

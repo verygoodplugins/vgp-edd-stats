@@ -59,13 +59,18 @@ class VGP_EDD_Stats_Admin_Page {
 
 		// Subpages for each stats section.
 		$subpages = array(
-			'customers-revenue' => __( 'Customers & Revenue', 'vgp-edd-stats' ),
-			'mrr-growth'        => __( 'MRR & Growth', 'vgp-edd-stats' ),
-			'renewals'          => __( 'Renewals & Cancellations', 'vgp-edd-stats' ),
-			'refunds'           => __( 'Refunds', 'vgp-edd-stats' ),
-			'licensing'         => __( 'Software Licensing', 'vgp-edd-stats' ),
-			'sites'             => __( 'Sites Stats', 'vgp-edd-stats' ),
-			'support'           => __( 'Support', 'vgp-edd-stats' ),
+			'executive-overview'     => __( '📊 Executive Overview', 'vgp-edd-stats' ),
+			'customer-analytics'     => __( '👥 Customer Analytics', 'vgp-edd-stats' ),
+			'revenue-intelligence'   => __( '💰 Revenue Intelligence', 'vgp-edd-stats' ),
+			'product-performance'    => __( '📦 Product Performance', 'vgp-edd-stats' ),
+			'subscription-analytics' => __( '🔄 Subscription Analytics', 'vgp-edd-stats' ),
+			'customers-revenue'      => __( 'Customers & Revenue', 'vgp-edd-stats' ),
+			'mrr-growth'            => __( 'MRR & Growth', 'vgp-edd-stats' ),
+			'renewals'              => __( 'Renewals & Cancellations', 'vgp-edd-stats' ),
+			'refunds'               => __( 'Refunds', 'vgp-edd-stats' ),
+			'licensing'             => __( 'Software Licensing', 'vgp-edd-stats' ),
+			'sites'                 => __( 'Sites Stats', 'vgp-edd-stats' ),
+			'support'               => __( 'Support', 'vgp-edd-stats' ),
 		);
 
 		foreach ( $subpages as $slug => $title ) {
@@ -100,7 +105,7 @@ class VGP_EDD_Stats_Admin_Page {
 		// Determine active section.
 		$section = str_replace( 'vgp-edd-stats-', '', $page );
 		if ( $section === 'vgp-edd-stats' ) {
-			$section = 'customers-revenue'; // Default to first page.
+			$section = 'executive-overview'; // Default to executive overview.
 		}
 		?>
 		<div class="wrap">

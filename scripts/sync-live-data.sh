@@ -25,9 +25,9 @@ NC='\033[0m' # No Color
 # Configuration
 LIVE_SSH="master_jsrfyuefqf@104.238.130.1"
 LIVE_WP_PATH="applications/urjxzpmdrd/public_html"
-LOCAL_DB_HOST="localhost"
+LOCAL_DB_HOST="127.0.0.1"
 LOCAL_DB_USER="root"
-LOCAL_DB_PASS="root"
+LOCAL_DB_PASS="root123!"
 LOCAL_DEV_DB="vgp_edd_dev"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
@@ -129,7 +129,7 @@ EXISTING_TABLES=()
 for table in "${EDD_TABLES[@]}"; do
     TABLE_EXISTS=$(ssh "$LIVE_SSH" "mysql -h'$LIVE_DB_HOST' -u'$LIVE_DB_USER' -p'$LIVE_DB_PASS' -D'$LIVE_DB_NAME' -e \"SHOW TABLES LIKE '$table'\" 2>/dev/null | grep -c '$table' || echo '0'")
 
-    if [ "$TABLE_EXISTS" -eq "1" ]; then
+    if [ "$TABLE_EXISTS" -ge "1" ]; then
         EXISTING_TABLES+=("$table")
         TABLE_LIST="$TABLE_LIST $table"
         print_success "Found table: $table"
@@ -143,32 +143,18 @@ if [ ${#EXISTING_TABLES[@]} -eq 0 ]; then
     exit 1
 fi
 
-# Export tables
-REMOTE_DUMP="/tmp/edd-dump-$TIMESTAMP.sql"
-print_step "Creating database dump on live site..."
-
-ssh "$LIVE_SSH" "mysqldump -h'$LIVE_DB_HOST' -u'$LIVE_DB_USER' -p'$LIVE_DB_PASS' '$LIVE_DB_NAME' $TABLE_LIST > '$REMOTE_DUMP' 2>&1" || {
-    print_error "Failed to create database dump on live site"
-    exit 1
-}
-
-print_success "Database dump created on live site"
-
-# Step 5: Download dump file
-print_step "Downloading dump file..."
+# Step 5: Export and download dump file (streaming directly via SSH)
+print_step "Exporting and downloading database dump..."
 mkdir -p "$DATA_DIR"
 
-scp "$LIVE_SSH:$REMOTE_DUMP" "$DUMP_FILE" > /dev/null 2>&1 || {
-    print_error "Failed to download dump file"
-    ssh "$LIVE_SSH" "rm -f '$REMOTE_DUMP'"
+ssh "$LIVE_SSH" "mysqldump -h'$LIVE_DB_HOST' -u'$LIVE_DB_USER' -p'$LIVE_DB_PASS' '$LIVE_DB_NAME' $TABLE_LIST 2>/dev/null" > "$DUMP_FILE" || {
+    print_error "Failed to export database dump"
+    rm -f "$DUMP_FILE"
     exit 1
 }
 
 DUMP_SIZE=$(du -h "$DUMP_FILE" | cut -f1)
-print_success "Downloaded dump file ($DUMP_SIZE)"
-
-# Clean up remote dump file
-ssh "$LIVE_SSH" "rm -f '$REMOTE_DUMP'" > /dev/null 2>&1
+print_success "Database dump downloaded ($DUMP_SIZE)"
 
 # Step 6: Create/recreate local development database
 print_step "Creating local development database..."
