@@ -1,4 +1,9 @@
 import React, { useState } from 'react';
+import ExecutiveOverviewPage from './pages/ExecutiveOverviewPage';
+import CustomerAnalyticsPage from './pages/CustomerAnalyticsPage';
+import RevenueIntelligencePage from './pages/RevenueIntelligencePage';
+import ProductPerformancePage from './pages/ProductPerformancePage';
+import SubscriptionAnalyticsPage from './pages/SubscriptionAnalyticsPage';
 import CustomersRevenuePage from './pages/CustomersRevenuePage';
 import MRRGrowthPage from './pages/MRRGrowthPage';
 import RenewalsPage from './pages/RenewalsPage';
@@ -20,6 +25,16 @@ function App({ section }) {
 	// Render appropriate page based on section
 	const renderPage = () => {
 		switch (section) {
+			case 'executive-overview':
+				return <ExecutiveOverviewPage dateRange={dateRange} />;
+			case 'customer-analytics':
+				return <CustomerAnalyticsPage dateRange={dateRange} />;
+			case 'revenue-intelligence':
+				return <RevenueIntelligencePage dateRange={dateRange} />;
+			case 'product-performance':
+				return <ProductPerformancePage dateRange={dateRange} />;
+			case 'subscription-analytics':
+				return <SubscriptionAnalyticsPage dateRange={dateRange} />;
 			case 'customers-revenue':
 				return <CustomersRevenuePage dateRange={dateRange} />;
 			case 'mrr-growth':
@@ -35,7 +50,7 @@ function App({ section }) {
 			case 'support':
 				return <SupportPage dateRange={dateRange} />;
 			default:
-				return <CustomersRevenuePage dateRange={dateRange} />;
+				return <ExecutiveOverviewPage dateRange={dateRange} />;
 		}
 	};
 
@@ -67,6 +82,11 @@ function App({ section }) {
 
 function getSectionTitle(section) {
 	const titles = {
+		'executive-overview': 'Executive Overview',
+		'customer-analytics': 'Customer Analytics',
+		'revenue-intelligence': 'Revenue Intelligence',
+		'product-performance': 'Product Performance',
+		'subscription-analytics': 'Subscription Analytics',
 		'customers-revenue': 'Customers & Revenue',
 		'mrr-growth': 'MRR & Growth',
 		'renewals': 'Renewals & Cancellations',
