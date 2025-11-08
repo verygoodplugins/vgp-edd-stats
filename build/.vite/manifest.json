@@ -1,0 +1,11 @@
+{
+  "src/index.jsx": {
+    "file": "dashboard.js",
+    "name": "dashboard",
+    "src": "src/index.jsx",
+    "isEntry": true,
+    "css": [
+      "dashboard.css"
+    ]
+  }
+}
