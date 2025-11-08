@@ -26,16 +26,28 @@ function ProductPerformancePage({ dateRange }) {
         queryFn: () => API.getProductMatrix(dateRange),
     });
 
+    // Fallback: fetch without date filter if filtered result is empty
+    const { data: matrixAll, isLoading: matrixAllLoading } = useQuery({
+        queryKey: ['product-matrix-all'],
+        queryFn: () => API.getProductMatrix(),
+    });
+
     const { data: topProducts, isLoading: topLoading } = useQuery({
         queryKey: ['top-products', dateRange],
         queryFn: () => API.getTopProducts(dateRange, 20),
     });
 
+    // Define omitted datasets to avoid ReferenceError in legacy sections
+    const crossSellData = null;
+    const lifecycleData = null;
+    const profitabilityData = null;
+
     // Calculate summary metrics
     const summaryMetrics = useMemo(() => {
-        if (!matrixData) return null;
-
-        const products = matrixData || [];
+        const products = (Array.isArray(matrixData) && matrixData.length)
+            ? matrixData
+            : (Array.isArray(matrixAll) ? matrixAll : []);
+        if (!products.length) return null;
         const totalRevenue = products.reduce((sum, p) => sum + parseFloat(p.current_revenue || 0), 0);
         const totalUnits = products.reduce((sum, p) => sum + parseInt(p.units_sold || 0, 10), 0);
         const avgGrowth = products.length > 0
@@ -50,7 +62,7 @@ function ProductPerformancePage({ dateRange }) {
             activeProducts,
             avgAOV: totalUnits > 0 ? totalRevenue / totalUnits : 0,
         };
-    }, [matrixData]);
+    }, [matrixData, matrixAll]);
 
     // Filter and sort products
     const filteredProducts = useMemo(() => {
@@ -97,9 +109,10 @@ function ProductPerformancePage({ dateRange }) {
 
     // BCG Matrix Chart
     const bcgMatrixOption = useMemo(() => {
-        if (!matrixData || matrixData.length === 0) return null;
-
-        const products = matrixData;
+        const products = (Array.isArray(matrixData) && matrixData.length)
+            ? matrixData
+            : (Array.isArray(matrixAll) ? matrixAll : []);
+        if (!products.length) return null;
         const avgRevenue = products.reduce((sum, p) => sum + parseFloat(p.current_revenue || 0), 0) / products.length;
         const avgGrowth = products.reduce((sum, p) => sum + parseFloat(p.growth_rate || 0), 0) / products.length;
 
@@ -169,7 +182,7 @@ function ProductPerformancePage({ dateRange }) {
                 },
             },
         };
-    }, [matrixData]);
+    }, [matrixData, matrixAll]);
 
     // Cross-sell Heatmap
     const crossSellHeatmapOption = useMemo(() => {
@@ -419,9 +432,8 @@ function ProductPerformancePage({ dateRange }) {
 
     // Omitted sections until endpoints exist
     const crossSellLoading = false, lifecycleLoading = false, profitabilityLoading = false;
-    const crossSellHeatmapOption = null, lifecycleTimelineOption = null, profitabilityOption = null;
 
-    const isLoading = matrixLoading || topLoading;
+    const isLoading = (matrixLoading && matrixAllLoading) || topLoading;
 
     if (isLoading) {
         return (
@@ -439,31 +451,31 @@ function ProductPerformancePage({ dateRange }) {
                     title="Total Revenue"
                     value={summaryMetrics?.totalRevenue}
                     type="currency"
-                    loading={productsLoading}
+                    loading={isLoading}
                 />
                 <StatCard
                     title="Active Products"
                     value={summaryMetrics?.activeProducts}
                     type="number"
-                    loading={productsLoading}
+                    loading={isLoading}
                 />
                 <StatCard
                     title="Units Sold"
                     value={summaryMetrics?.totalUnits}
                     type="number"
-                    loading={productsLoading}
+                    loading={isLoading}
                 />
                 <StatCard
                     title="Avg AOV"
                     value={summaryMetrics?.avgAOV}
                     type="currency"
-                    loading={productsLoading}
+                    loading={isLoading}
                 />
                 <StatCard
                     title="Avg Growth"
                     value={summaryMetrics?.avgGrowth}
                     type="percentage"
-                    loading={productsLoading}
+                    loading={isLoading}
                 />
             </div>
 
@@ -530,7 +542,7 @@ function ProductPerformancePage({ dateRange }) {
                         <p><strong>Dogs:</strong> Low growth, low revenue - Consider discontinuation</p>
                     </div>
                 </div>
-                <ChartWrapper option={bcgMatrixOption} loading={matrixLoading} height="500px" />
+                <ChartWrapper option={bcgMatrixOption} loading={isLoading} height={500} />
             </div>
 
             {/* Product Performance Table */}

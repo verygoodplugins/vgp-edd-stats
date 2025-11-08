@@ -11,16 +11,27 @@ function RenewalsPage({ dateRange }) {
         queryFn: () => API.getRenewalRates(dateRange),
     });
 
+    // Fallback to unfiltered series if the selected window has no rows
+    const { data: renewalDataAll, isLoading: renewalAllLoading } = useQuery({
+        queryKey: ['renewal-rates-all'],
+        queryFn: () => API.getRenewalRates(),
+    });
+
+    // Normalize to array and fallback to all-time if filtered set is empty
+    const filteredRows = Array.isArray(renewalData) ? renewalData : [];
+    const allRows = Array.isArray(renewalDataAll) ? renewalDataAll : [];
+    const renewalRows = filteredRows.length ? filteredRows : allRows;
+
     // Average first-year renewal rate for the selected period
     const avgRenewalRate = useMemo(() => {
-        if (!renewalData || renewalData.length === 0) return null;
-        const values = renewalData
+        if (renewalRows.length === 0) return null;
+        const values = renewalRows
             .map((d) => parseFloat(d.renewal_rate))
             .filter((n) => !Number.isNaN(n));
         if (values.length === 0) return null;
         const sum = values.reduce((a, b) => a + b, 0);
         return sum / values.length;
-    }, [renewalData]);
+    }, [renewalRows]);
 
 	const { data: upcoming30, isLoading: upcoming30Loading } = useQuery({
 		queryKey: ['upcoming-renewals-30'],
@@ -40,10 +51,10 @@ function RenewalsPage({ dateRange }) {
 				return `${point.name}<br/>${point.marker} ${point.seriesName}: ${point.value.toFixed(2)}%`;
 			},
 		},
-		xAxis: {
-			type: 'category',
-			data: renewalData?.map((d) => d.label) || [],
-		},
+        xAxis: {
+            type: 'category',
+            data: renewalRows.map((d) => d.label),
+        },
 		yAxis: {
 			type: 'value',
 			axisLabel: {
@@ -53,15 +64,15 @@ function RenewalsPage({ dateRange }) {
 		series: [
 			{
 				name: 'Renewal Rate',
-				data: renewalData?.map((d) => parseFloat(d.renewal_rate)) || [],
-				type: 'line',
-				smooth: true,
-				itemStyle: {
-					color: '#10b981',
-				},
-			},
-		],
-	};
+                data: renewalRows.map((d) => parseFloat(d.renewal_rate)),
+                type: 'line',
+                smooth: true,
+                itemStyle: {
+                    color: '#10b981',
+                },
+            },
+        ],
+    };
 
 	return (
 		<div className="space-y-6">
@@ -89,13 +100,13 @@ function RenewalsPage({ dateRange }) {
                 />
             </div>
 
-			<ChartWrapper
-				title="First Year Renewal Rates"
-				subtitle="Percentage of customers who renewed after first year"
-				option={renewalChartOption}
-				loading={renewalLoading}
-				height={400}
-			/>
+            <ChartWrapper
+                title="First Year Renewal Rates"
+                subtitle="Percentage of customers who renewed after first year"
+                option={renewalChartOption}
+                loading={renewalLoading && renewalAllLoading}
+                height={400}
+            />
 		</div>
 	);
 }

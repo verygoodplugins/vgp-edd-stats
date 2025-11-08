@@ -678,7 +678,10 @@ class VGP_EDD_Stats_API {
 		$start_date = $request->get_param( 'start_date' );
 		$end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_renewal_rates_by_month( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_renewal_rates_by_month( $start_date, $end_date );
+        if ( ! is_array( $data ) ) {
+            $data = array();
+        }
 
 		return rest_ensure_response(
 			array(

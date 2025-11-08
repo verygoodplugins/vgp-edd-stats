@@ -124,7 +124,6 @@ function CustomerAnalyticsPage() {
             </div>
         </div>
     );
-}
 
 	const rfmScatterOption = {
 		tooltip: {

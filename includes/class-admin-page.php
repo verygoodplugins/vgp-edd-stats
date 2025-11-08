@@ -58,18 +58,15 @@ class VGP_EDD_Stats_Admin_Page {
 		);
 
 		// Subpages for each stats section.
+        // Keep only the pages that existed in the original Appsmith dashboards
         $subpages = array(
-            // Executive overview is the default for the top-level page; omit duplicate submenu entry.
-            'customer-analytics'     => __( '👥 Customer Analytics', 'vgp-edd-stats' ),
-            'product-performance'    => __( '📦 Product Performance', 'vgp-edd-stats' ),
-            'subscription-analytics' => __( '🔄 Subscription Analytics', 'vgp-edd-stats' ),
             'customers-revenue'      => __( 'Customers & Revenue', 'vgp-edd-stats' ),
-            'mrr-growth'            => __( 'MRR & Growth', 'vgp-edd-stats' ),
-            'renewals'              => __( 'Renewals & Cancellations', 'vgp-edd-stats' ),
-            'refunds'               => __( 'Refunds', 'vgp-edd-stats' ),
-            'licensing'             => __( 'Software Licensing', 'vgp-edd-stats' ),
-            'sites'                 => __( 'Sites Stats', 'vgp-edd-stats' ),
-            'support'               => __( 'Support', 'vgp-edd-stats' ),
+            'mrr-growth'             => __( 'MRR & Growth', 'vgp-edd-stats' ),
+            'renewals'               => __( 'Renewals & Cancellations', 'vgp-edd-stats' ),
+            'refunds'                => __( 'Refunds', 'vgp-edd-stats' ),
+            'licensing'              => __( 'Software Licensing', 'vgp-edd-stats' ),
+            'sites'                  => __( 'Sites Stats', 'vgp-edd-stats' ),
+            'support'                => __( 'Support', 'vgp-edd-stats' ),
         );
 
 		foreach ( $subpages as $slug => $title ) {

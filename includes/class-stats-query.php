@@ -23,6 +23,31 @@ class VGP_EDD_Stats_Query {
 	const CACHE_GROUP = 'vgp_edd_stats_';
 
 	/**
+	 * Historical data cutoff date for cohort analysis.
+	 * Customers created before this date are excluded from renewal rate calculations.
+	 *
+	 * @var string Date in Y-m-d format.
+	 */
+	const HISTORICAL_DATA_CUTOFF_DATE = '2015-01-01';
+
+	/**
+	 * Renewal window in months for cohort analysis.
+	 * Defines the period after customer signup when renewals are measured.
+	 *
+	 * @var int Number of months.
+	 */
+	const RENEWAL_WINDOW_MONTHS = 12;
+
+	/**
+	 * Purchase value threshold for excluding single-purchase customers.
+	 * Customers with purchase_count = 1 and purchase_value >= this amount are excluded
+	 * from renewal rate calculations (typically enterprise/lifetime purchases).
+	 *
+	 * @var float Purchase value threshold.
+	 */
+	const EXCLUSION_PURCHASE_VALUE_THRESHOLD = 847.0;
+
+	/**
 	 * Development database connection.
 	 *
 	 * @var wpdb|null
@@ -421,13 +446,19 @@ class VGP_EDD_Stats_Query {
     public static function get_renewal_rates_by_month( $start_date = null, $end_date = null ) {
         $wpdb = self::get_db();
 
-        // Filter by renewal month window (12 months after signup) to respect date ranges
-        $renewalWindowFilter = '';
+        // Optional filter based on renewal month (12 months after signup)
+        $filter = '';
         if ( $start_date ) {
-            $renewalWindowFilter .= $wpdb->prepare( " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') >= %s", substr( $start_date, 0, 7 ) );
+            $filter .= $wpdb->prepare(
+                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') >= %s",
+                substr( $start_date, 0, 7 )
+            );
         }
         if ( $end_date ) {
-            $renewalWindowFilter .= $wpdb->prepare( " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') <= %s", substr( $end_date, 0, 7 ) );
+            $filter .= $wpdb->prepare(
+                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') <= %s",
+                substr( $end_date, 0, 7 )
+            );
         }
 
         $query = "
@@ -436,20 +467,20 @@ class VGP_EDD_Stats_Query {
                 DATE_FORMAT(STR_TO_DATE(CONCAT(renewal_month, '-01'), '%Y-%m-%d'), '%M %Y') AS label,
                 ROUND(AVG(renewal_rate), 2) AS renewal_rate
             FROM (
-                SELECT 
+                SELECT
                     DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%Y-%m') AS renewal_month,
-                    100.0 * COUNT(DISTINCT CASE 
+                    100.0 * COUNT(DISTINCT CASE
                         WHEN o.status IN ('complete','edd_subscription')
                          AND o.date_created >= DATE_ADD(c.date_created, INTERVAL 12 MONTH)
                          AND o.date_created <  DATE_ADD(c.date_created, INTERVAL 13 MONTH)
-                         THEN o.customer_id END) 
+                         THEN o.customer_id END)
                     / NULLIF(COUNT(DISTINCT c.id), 0) AS renewal_rate
                 FROM {$wpdb->prefix}edd_customers c
                 LEFT JOIN {$wpdb->prefix}edd_orders o ON c.id = o.customer_id
                 WHERE c.date_created >= '2015-01-01'
                   AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
                   AND NOT (c.purchase_count = 1 AND c.purchase_value >= 847)
-                  {$renewalWindowFilter}
+                  {$filter}
                 GROUP BY DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%Y-%m')
             ) AS r
             GROUP BY renewal_month
