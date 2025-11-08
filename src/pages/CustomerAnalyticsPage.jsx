@@ -1,131 +1,130 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API, formatCurrency, formatNumber, formatPercentage } from '../utils/api';
+import { API, formatCurrency, formatNumber } from '../utils/api';
 import StatCard from '../components/StatCard';
 import ChartWrapper from '../components/ChartWrapper';
-import clsx from 'clsx';
 
-function CustomerAnalyticsPage({ dateRange }) {
-	const [activeSegment, setActiveSegment] = useState(null);
-	const [selectedCohort, setSelectedCohort] = useState('all');
+function CustomerAnalyticsPage() {
+    // Fetch real data
+    const { data: clv, isLoading: clvLoading } = useQuery({
+        queryKey: ['customer-clv-top'],
+        queryFn: () => API.getCustomerCLV(50),
+    });
 
-	// Mock data for demonstration - In production, these would come from API endpoints
-	const { data: clvData, isLoading: clvLoading } = useQuery({
-		queryKey: ['customer-clv', dateRange],
-		queryFn: () => generateMockCLVData(),
-	});
+    const { data: rfm, isLoading: rfmLoading } = useQuery({
+        queryKey: ['customer-rfm'],
+        queryFn: () => API.getCustomerRFMReal(),
+    });
 
-	const { data: rfmData, isLoading: rfmLoading } = useQuery({
-		queryKey: ['rfm-segments', dateRange],
-		queryFn: () => generateMockRFMData(),
-	});
+    const { data: health, isLoading: healthLoading } = useQuery({
+        queryKey: ['customer-health'],
+        queryFn: () => API.getCustomerHealthReal(),
+    });
 
-	const { data: healthData, isLoading: healthLoading } = useQuery({
-		queryKey: ['customer-health', dateRange],
-		queryFn: () => generateMockHealthData(),
-	});
+    // Summary metrics
+    const summary = useMemo(() => {
+        if (!clv || !rfm || !health) return null;
+        const totalCustomers = new Set([...(rfm || []).map(r => r.customer_id), ...(clv || []).map(c => c.customer_id)]).size;
+        const avgCLV = clv.length ? clv.reduce((s, c) => s + parseFloat(c.total_spent || 0), 0) / clv.length : 0;
+        const atRisk = (health || []).filter(h => (h.health_status || '').toLowerCase().includes('risk')).length;
+        return { totalCustomers, avgCLV, atRisk };
+    }, [clv, rfm, health]);
 
-	const { data: funnelData, isLoading: funnelLoading } = useQuery({
-		queryKey: ['customer-funnel', dateRange],
-		queryFn: () => generateMockFunnelData(),
-	});
+    // RFM segment summary (bucket using scores)
+    const rfmSegOption = useMemo(() => {
+        if (!rfm) return null;
+        const buckets = {
+            Champions: 0,
+            'Loyal Customers': 0,
+            'Big Spenders': 0,
+            'Recent Customers': 0,
+            'At Risk': 0,
+            Lost: 0,
+            Potential: 0,
+        };
+        rfm.forEach(r => {
+            const total = (parseInt(r.recency_score) || 0) + (parseInt(r.frequency_score) || 0) + (parseInt(r.monetary_score) || 0);
+            if (total >= 13) buckets['Champions']++;
+            else if (total >= 10 && (parseInt(r.recency_score) || 0) >= 4) buckets['Loyal Customers']++;
+            else if ((parseInt(r.monetary_score) || 0) >= 4 && ((parseInt(r.recency_score) || 0) + (parseInt(r.frequency_score) || 0)) >= 6) buckets['Big Spenders']++;
+            else if ((parseInt(r.recency_score) || 0) >= 4 && (parseInt(r.frequency_score) || 0) <= 2) buckets['Recent Customers']++;
+            else if ((parseInt(r.frequency_score) || 0) >= 4 && (parseInt(r.recency_score) || 0) <= 2) buckets['At Risk']++;
+            else if ((parseInt(r.recency_score) || 0) <= 2 && (parseInt(r.frequency_score) || 0) <= 2) buckets['Lost']++;
+            else buckets['Potential']++;
+        });
+        return {
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: Object.keys(buckets), axisLabel: { rotate: 20 } },
+            yAxis: { type: 'value' },
+            series: [{ type: 'bar', data: Object.values(buckets), itemStyle: { color: '#0ea5e9' } }],
+        };
+    }, [rfm]);
 
-	const { data: geoData, isLoading: geoLoading } = useQuery({
-		queryKey: ['customer-geography', dateRange],
-		queryFn: () => generateMockGeoData(),
-	});
+    // Health distribution
+    const healthOption = useMemo(() => {
+        if (!health) return null;
+        const groups = {};
+        health.forEach(h => {
+            const key = (h.health_status || 'Unknown');
+            groups[key] = (groups[key] || 0) + 1;
+        });
+        const data = Object.entries(groups).map(([name, value]) => ({ name, value }));
+        return {
+            tooltip: { trigger: 'item' },
+            series: [{ type: 'pie', radius: '60%', data }],
+        };
+    }, [health]);
 
-	// Calculate summary metrics
-	const summaryMetrics = useMemo(() => {
-		if (!clvData || !rfmData || !healthData) return null;
+    // Top CLV table rows
+    const topRows = (clv || []).map(c => ({
+        id: c.customer_id,
+        name: c.name || c.email,
+        total: parseFloat(c.total_spent || 0),
+        aov: parseFloat(c.avg_order_value || 0),
+        orders: parseInt(c.purchase_count || 0, 10),
+    }));
 
-		return {
-			avgCLV: clvData.topCustomers.reduce((sum, c) => sum + c.clv, 0) / clvData.topCustomers.length,
-			totalCustomers: rfmData.segments.reduce((sum, s) => sum + s.count, 0),
-			atRiskCount: healthData.atRiskCustomers.length,
-			healthyPercentage: (healthData.distribution.find(d => d.name === 'Healthy')?.value || 0),
-		};
-	}, [clvData, rfmData, healthData]);
+    return (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard title="Customers (sample)" value={summary?.totalCustomers} type="number" loading={clvLoading || rfmLoading || healthLoading} />
+                <StatCard title="Avg CLV (sample)" value={summary?.avgCLV} type="currency" loading={clvLoading} />
+                <StatCard title="At Risk (sample)" value={summary?.atRisk} type="number" loading={healthLoading} />
+            </div>
 
-	// Chart Options
-	const clvDistributionOption = {
-		tooltip: {
-			trigger: 'axis',
-			axisPointer: { type: 'shadow' },
-			formatter: (params) => {
-				const point = params[0];
-				return `${point.name}<br/>${point.marker} Customers: ${point.value}<br/>Avg CLV: ${formatCurrency(point.data.avgClv)}`;
-			},
-		},
-		grid: { top: 40, right: 60, bottom: 60, left: 80 },
-		xAxis: {
-			type: 'category',
-			data: clvData?.distribution.map(d => d.range) || [],
-			axisLabel: { rotate: 45, interval: 0, fontSize: 11 },
-		},
-		yAxis: {
-			type: 'value',
-			name: 'Customer Count',
-		},
-		series: [{
-			data: clvData?.distribution.map(d => ({ value: d.count, avgClv: d.avgClv })) || [],
-			type: 'bar',
-			itemStyle: {
-				color: {
-					type: 'linear',
-					x: 0, y: 0, x2: 0, y2: 1,
-					colorStops: [
-						{ offset: 0, color: '#0ea5e9' },
-						{ offset: 1, color: '#0369a1' },
-					],
-				},
-			},
-			label: {
-				show: true,
-				position: 'top',
-				formatter: '{c}',
-				fontSize: 10,
-			},
-		}],
-	};
+            <ChartWrapper title="RFM Segments" subtitle="Distribution by behavioral segment" option={rfmSegOption} loading={rfmLoading} height={360} />
+            <ChartWrapper title="Customer Health" subtitle="Recent activity and subscription status" option={healthOption} loading={healthLoading} height={360} />
 
-	const clvCohortOption = {
-		tooltip: {
-			trigger: 'axis',
-			formatter: (params) => {
-				let result = `${params[0].name}<br/>`;
-				params.forEach(p => {
-					result += `${p.marker} ${p.seriesName}: ${formatCurrency(p.value)}<br/>`;
-				});
-				return result;
-			},
-		},
-		legend: {
-			data: clvData?.cohorts.map(c => c.name) || [],
-			bottom: 0,
-			type: 'scroll',
-		},
-		grid: { top: 40, right: 40, bottom: 80, left: 80 },
-		xAxis: {
-			type: 'category',
-			data: clvData?.cohorts[0]?.months || [],
-			axisLabel: { rotate: 45 },
-		},
-		yAxis: {
-			type: 'value',
-			name: 'Average CLV',
-			axisLabel: {
-				formatter: (value) => formatCurrency(value),
-			},
-		},
-		series: clvData?.cohorts.map(cohort => ({
-			name: cohort.name,
-			type: 'line',
-			smooth: true,
-			data: cohort.values,
-			emphasis: { focus: 'series' },
-		})) || [],
-	};
+            <div className="stat-card">
+                <div className="mb-4">
+                    <h3 className="text-lg font-semibold">Top Customers by Lifetime Value</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Orders</th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">AOV</th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {topRows.map((row) => (
+                                <tr key={row.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm text-gray-900">{row.name}</td>
+                                    <td className="px-4 py-3 text-sm text-right text-gray-600">{formatNumber(row.orders)}</td>
+                                    <td className="px-4 py-3 text-sm text-right text-gray-600">{formatCurrency(row.aov)}</td>
+                                    <td className="px-4 py-3 text-sm text-right text-gray-900 font-semibold">{formatCurrency(row.total)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 	const rfmScatterOption = {
 		tooltip: {
