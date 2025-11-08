@@ -165,9 +165,20 @@ export const API = {
 	getTopLicenses: (limit = 20) =>
 		apiRequest('/licenses/top', { limit }),
 
-	// Customer Analytics
-	getCustomerLifetimeValue: (dateRange) =>
-		apiRequest('/customers/lifetime-value', formatDateRange(dateRange)),
+    // Customer Analytics
+    // New, server-backed endpoints
+    getCustomerCLV: (limit = 50) =>
+        apiRequest('/customers/clv', { limit }),
+
+    getCustomerRFMReal: () =>
+        apiRequest('/customers/rfm'),
+
+    getCustomerHealthReal: () =>
+        apiRequest('/customers/health'),
+
+    // Legacy placeholders (unused now)
+    getCustomerLifetimeValue: (dateRange) =>
+        apiRequest('/customers/lifetime-value', formatDateRange(dateRange)),
 
 	getCustomerRetentionRate: (dateRange) =>
 		apiRequest('/customers/retention-rate', formatDateRange(dateRange)),
@@ -178,18 +189,24 @@ export const API = {
 	getCustomerSegmentation: (dateRange) =>
 		apiRequest('/customers/segmentation', formatDateRange(dateRange)),
 
-	getCustomerRFM: (dateRange) =>
-		apiRequest('/customers/rfm-analysis', formatDateRange(dateRange)),
+    getCustomerRFM: (dateRange) =>
+        apiRequest('/customers/rfm', formatDateRange(dateRange)),
 
 	getAverageOrderValue: (dateRange) =>
 		apiRequest('/customers/aov', formatDateRange(dateRange)),
 
-	getCustomerHealth: (dateRange) =>
-		apiRequest('/customers/health-score', formatDateRange(dateRange)),
+    getCustomerHealth: (dateRange) =>
+        apiRequest('/customers/health', formatDateRange(dateRange)),
 
-	// Product Performance
-	getTopProducts: (dateRange, limit = 10) =>
-		apiRequest('/products/top', { ...formatDateRange(dateRange), limit }),
+    // Product Performance
+    getTopProducts: (dateRange, limit = 10) =>
+        apiRequest('/products/top', { ...formatDateRange(dateRange), limit }),
+
+    getProductMatrix: (dateRange) =>
+        apiRequest('/products/matrix', formatDateRange(dateRange)),
+
+    getProductLifecycle: () =>
+        apiRequest('/products/lifecycle'),
 
 	getProductRevenueTrend: (productId, dateRange) =>
 		apiRequest('/products/revenue-trend', { product_id: productId, ...formatDateRange(dateRange) }),

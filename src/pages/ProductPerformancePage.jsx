@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import ReactECharts from 'echarts-for-react';
-import { API } from '../utils/api';
+import { API, formatCurrency } from '../utils/api';
 import StatCard from '../components/StatCard';
 import ChartWrapper from '../components/ChartWrapper';
 
@@ -21,38 +20,28 @@ function ProductPerformancePage({ dateRange }) {
     const [sortConfig, setSortConfig] = useState({ key: 'revenue', direction: 'desc' });
     const [selectedQuadrant, setSelectedQuadrant] = useState('all');
 
-    // Fetch product performance data
-    const { data: productsData, isLoading: productsLoading } = useQuery({
-        queryKey: ['product-performance', dateRange],
-        queryFn: () => API.getProductPerformance(dateRange),
+    // Use existing endpoints
+    const { data: matrixData, isLoading: matrixLoading } = useQuery({
+        queryKey: ['product-matrix', dateRange],
+        queryFn: () => API.getProductMatrix(dateRange),
     });
 
-    const { data: crossSellData, isLoading: crossSellLoading } = useQuery({
-        queryKey: ['cross-sell', dateRange],
-        queryFn: () => API.getCrossSellMatrix(dateRange),
-    });
-
-    const { data: lifecycleData, isLoading: lifecycleLoading } = useQuery({
-        queryKey: ['product-lifecycle', dateRange],
-        queryFn: () => API.getProductLifecycle(dateRange),
-    });
-
-    const { data: profitabilityData, isLoading: profitabilityLoading } = useQuery({
-        queryKey: ['product-profitability', dateRange],
-        queryFn: () => API.getProductProfitability(dateRange),
+    const { data: topProducts, isLoading: topLoading } = useQuery({
+        queryKey: ['top-products', dateRange],
+        queryFn: () => API.getTopProducts(dateRange, 20),
     });
 
     // Calculate summary metrics
     const summaryMetrics = useMemo(() => {
-        if (!productsData) return null;
+        if (!matrixData) return null;
 
-        const products = productsData.products || [];
-        const totalRevenue = products.reduce((sum, p) => sum + parseFloat(p.revenue || 0), 0);
+        const products = matrixData || [];
+        const totalRevenue = products.reduce((sum, p) => sum + parseFloat(p.current_revenue || 0), 0);
         const totalUnits = products.reduce((sum, p) => sum + parseInt(p.units_sold || 0, 10), 0);
         const avgGrowth = products.length > 0
             ? products.reduce((sum, p) => sum + parseFloat(p.growth_rate || 0), 0) / products.length
             : 0;
-        const activeProducts = products.filter(p => parseFloat(p.revenue || 0) > 0).length;
+        const activeProducts = products.filter(p => parseFloat(p.current_revenue || 0) > 0).length;
 
         return {
             totalRevenue,
@@ -61,23 +50,23 @@ function ProductPerformancePage({ dateRange }) {
             activeProducts,
             avgAOV: totalUnits > 0 ? totalRevenue / totalUnits : 0,
         };
-    }, [productsData]);
+    }, [matrixData]);
 
     // Filter and sort products
     const filteredProducts = useMemo(() => {
-        if (!productsData?.products) return [];
+        if (!topProducts) return [];
 
-        let filtered = productsData.products.filter(product =>
-            product.name.toLowerCase().includes(searchTerm.toLowerCase())
+        let filtered = topProducts.filter(product =>
+            (product.product_name || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
 
         // Apply quadrant filter if needed
         if (selectedQuadrant !== 'all' && filtered.length > 0) {
-            const avgRevenue = filtered.reduce((sum, p) => sum + parseFloat(p.revenue || 0), 0) / filtered.length;
+            const avgRevenue = filtered.reduce((sum, p) => sum + parseFloat(p.total_revenue || 0), 0) / filtered.length;
             const avgGrowth = filtered.reduce((sum, p) => sum + parseFloat(p.growth_rate || 0), 0) / filtered.length;
 
             filtered = filtered.filter(p => {
-                const revenue = parseFloat(p.revenue || 0);
+                const revenue = parseFloat(p.total_revenue || 0);
                 const growth = parseFloat(p.growth_rate || 0);
 
                 switch (selectedQuadrant) {
@@ -97,32 +86,33 @@ function ProductPerformancePage({ dateRange }) {
 
         // Sort
         filtered.sort((a, b) => {
-            const aVal = parseFloat(a[sortConfig.key] || 0);
-            const bVal = parseFloat(b[sortConfig.key] || 0);
+            const key = sortConfig.key === 'revenue' ? 'total_revenue' : sortConfig.key;
+            const aVal = parseFloat(a[key] || 0);
+            const bVal = parseFloat(b[key] || 0);
             return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
         });
 
         return filtered;
-    }, [productsData, searchTerm, sortConfig, selectedQuadrant]);
+    }, [topProducts, searchTerm, sortConfig, selectedQuadrant]);
 
     // BCG Matrix Chart
     const bcgMatrixOption = useMemo(() => {
-        if (!productsData?.products) return null;
+        if (!matrixData || matrixData.length === 0) return null;
 
-        const products = productsData.products;
-        const avgRevenue = products.reduce((sum, p) => sum + parseFloat(p.revenue || 0), 0) / products.length;
+        const products = matrixData;
+        const avgRevenue = products.reduce((sum, p) => sum + parseFloat(p.current_revenue || 0), 0) / products.length;
         const avgGrowth = products.reduce((sum, p) => sum + parseFloat(p.growth_rate || 0), 0) / products.length;
 
         const data = products.map(p => ({
-            name: p.name,
+            name: p.product_name,
             value: [
-                parseFloat(p.revenue || 0),
+                parseFloat(p.current_revenue || 0),
                 parseFloat(p.growth_rate || 0),
-                parseFloat(p.revenue || 0),
+                parseFloat(p.current_revenue || 0),
             ],
             itemStyle: {
                 color: getQuadrantColor(
-                    parseFloat(p.revenue || 0),
+                    parseFloat(p.current_revenue || 0),
                     parseFloat(p.growth_rate || 0),
                     avgRevenue,
                     avgGrowth
@@ -174,12 +164,12 @@ function ProductPerformancePage({ dateRange }) {
                 formatter: (params) => {
                     const [revenue, growth] = params.value;
                     return `<strong>${params.name}</strong><br/>
-                            Revenue: $${revenue.toLocaleString()}<br/>
+                            Revenue: ${formatCurrency(revenue)}<br/>
                             Growth: ${growth.toFixed(1)}%`;
                 },
             },
         };
-    }, [productsData]);
+    }, [matrixData]);
 
     // Cross-sell Heatmap
     const crossSellHeatmapOption = useMemo(() => {
@@ -427,7 +417,11 @@ function ProductPerformancePage({ dateRange }) {
         };
     };
 
-    const isLoading = productsLoading || crossSellLoading || lifecycleLoading || profitabilityLoading;
+    // Omitted sections until endpoints exist
+    const crossSellLoading = false, lifecycleLoading = false, profitabilityLoading = false;
+    const crossSellHeatmapOption = null, lifecycleTimelineOption = null, profitabilityOption = null;
+
+    const isLoading = matrixLoading || topLoading;
 
     if (isLoading) {
         return (
@@ -536,7 +530,7 @@ function ProductPerformancePage({ dateRange }) {
                         <p><strong>Dogs:</strong> Low growth, low revenue - Consider discontinuation</p>
                     </div>
                 </div>
-                <ChartWrapper option={bcgMatrixOption} loading={productsLoading} height="500px" />
+                <ChartWrapper option={bcgMatrixOption} loading={matrixLoading} height="500px" />
             </div>
 
             {/* Product Performance Table */}
@@ -594,16 +588,16 @@ function ProductPerformancePage({ dateRange }) {
                             {filteredProducts.map((product, index) => (
                                 <tr key={index} className="hover:bg-gray-50">
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {product.name}
+                                        {product.product_name || product.name}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-900">
-                                        ${parseFloat(product.revenue || 0).toLocaleString()}
+                                        {formatCurrency(parseFloat(product.total_revenue || product.revenue || 0))}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-600">
                                         {parseInt(product.units_sold || 0, 10).toLocaleString()}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-600">
-                                        ${parseFloat(product.aov || 0).toFixed(2)}
+                                        {formatCurrency(parseFloat(product.aov || 0))}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         <span
