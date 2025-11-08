@@ -1,14 +1,26 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API } from '../utils/api';
 import StatCard from '../components/StatCard';
 import ChartWrapper from '../components/ChartWrapper';
 
 function RenewalsPage({ dateRange }) {
-	const { data: renewalData, isLoading: renewalLoading } = useQuery({
-		queryKey: ['renewal-rates', dateRange],
-		queryFn: () => API.getRenewalRates(dateRange),
-	});
+    // Apply UI date range by filtering the cohort signup month window on the server
+    const { data: renewalData, isLoading: renewalLoading } = useQuery({
+        queryKey: ['renewal-rates', dateRange],
+        queryFn: () => API.getRenewalRates(dateRange),
+    });
+
+    // Average first-year renewal rate for the selected period
+    const avgRenewalRate = useMemo(() => {
+        if (!renewalData || renewalData.length === 0) return null;
+        const values = renewalData
+            .map((d) => parseFloat(d.renewal_rate))
+            .filter((n) => !Number.isNaN(n));
+        if (values.length === 0) return null;
+        const sum = values.reduce((a, b) => a + b, 0);
+        return sum / values.length;
+    }, [renewalData]);
 
 	const { data: upcoming30, isLoading: upcoming30Loading } = useQuery({
 		queryKey: ['upcoming-renewals-30'],
@@ -53,22 +65,29 @@ function RenewalsPage({ dateRange }) {
 
 	return (
 		<div className="space-y-6">
-			<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-				<StatCard
-					title="Upcoming Renewals (30 Days)"
-					value={upcoming30?.count}
-					type="number"
-					subtitle={`Est. Revenue: $${upcoming30?.estimated_revenue?.toFixed(2) || 0}`}
-					loading={upcoming30Loading}
-				/>
-				<StatCard
-					title="Upcoming Renewals (365 Days)"
-					value={upcoming365?.count}
-					type="number"
-					subtitle={`Est. Revenue: $${upcoming365?.estimated_revenue?.toFixed(2) || 0}`}
-					loading={upcoming365Loading}
-				/>
-			</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard
+                    title="Upcoming Renewals (30 Days)"
+                    value={upcoming30?.count}
+                    type="number"
+                    subtitle={`Est. Revenue: $${upcoming30?.estimated_revenue?.toFixed(2) || 0}`}
+                    loading={upcoming30Loading}
+                />
+                <StatCard
+                    title="Upcoming Renewals (365 Days)"
+                    value={upcoming365?.count}
+                    type="number"
+                    subtitle={`Est. Revenue: $${upcoming365?.estimated_revenue?.toFixed(2) || 0}`}
+                    loading={upcoming365Loading}
+                />
+                <StatCard
+                    title="Renewal Rate"
+                    value={avgRenewalRate}
+                    type="percentage"
+                    subtitle="Avg first-year renewal rate"
+                    loading={renewalLoading}
+                />
+            </div>
 
 			<ChartWrapper
 				title="First Year Renewal Rates"

@@ -147,17 +147,28 @@ class VGP_EDD_Stats_API {
 			)
 		);
 
-		// Refunds endpoints.
-		register_rest_route(
-			self::NAMESPACE,
-			'/refunds/rates',
-			array(
-				'methods'             => 'GET',
-				'callback'            => array( $this, 'get_refund_rates' ),
-				'permission_callback' => array( $this, 'check_permissions' ),
-				'args'                => $this->get_date_range_args(),
-			)
-		);
+        // Refunds endpoints.
+        register_rest_route(
+            self::NAMESPACE,
+            '/refunds/rates',
+            array(
+                'methods'             => 'GET',
+                'callback'            => array( $this, 'get_refund_rates' ),
+                'permission_callback' => array( $this, 'check_permissions' ),
+                'args'                => $this->get_date_range_args(),
+            )
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
+            '/refunds/new-customers-yearly',
+            array(
+                'methods'             => 'GET',
+                'callback'            => array( $this, 'get_new_customer_refunds_yearly' ),
+                'permission_callback' => array( $this, 'check_permissions' ),
+                'args'                => $this->get_date_range_args(),
+            )
+        );
 
 		// Licensing endpoints.
 		register_rest_route(
@@ -701,11 +712,11 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_refund_rates( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
+    public function get_refund_rates( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_refund_rates_by_month( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_refund_rates_by_month( $start_date, $end_date );
 
 		return rest_ensure_response(
 			array(
@@ -713,7 +724,27 @@ class VGP_EDD_Stats_API {
 				'data'    => $data,
 			)
 		);
-	}
+    }
+
+    /**
+     * Get new customer refund rates by year.
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response Response object.
+     */
+    public function get_new_customer_refunds_yearly( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
+
+        $data = VGP_EDD_Stats_Query::get_new_customer_refund_rates_by_year( $start_date, $end_date );
+
+        return rest_ensure_response(
+            array(
+                'success' => true,
+                'data'    => $data,
+            )
+        );
+    }
 
 	/**
 	 * Get top licenses.
@@ -739,9 +770,9 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_customer_clv( $request ) {
-		$limit = $request->get_param( 'limit' );
-		$data  = VGP_EDD_Stats_Query::get_customer_lifetime_value( $limit );
+    public function get_customer_clv( $request ) {
+        $limit = $request->get_param( 'limit' );
+        $data  = VGP_EDD_Stats_Query::get_customer_lifetime_values( null, null, $limit );
 
 		return rest_ensure_response(
 			array(
@@ -757,8 +788,8 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_customer_rfm( $request ) {
-		$data = VGP_EDD_Stats_Query::get_customer_rfm_analysis();
+    public function get_customer_rfm( $request ) {
+        $data = VGP_EDD_Stats_Query::get_rfm_segments();
 
 		return rest_ensure_response(
 			array(
@@ -774,8 +805,8 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_customer_health( $request ) {
-		$data = VGP_EDD_Stats_Query::get_customer_health_metrics();
+    public function get_customer_health( $request ) {
+        $data = VGP_EDD_Stats_Query::get_customer_health_scores();
 
 		return rest_ensure_response(
 			array(
@@ -831,12 +862,12 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_top_products( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
-		$limit      = $request->get_param( 'limit' );
+    public function get_top_products( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
+        $limit      = $request->get_param( 'limit' );
 
-		$data = VGP_EDD_Stats_Query::get_top_products_by_revenue( $start_date, $end_date, $limit );
+        $data = VGP_EDD_Stats_Query::get_top_products( $start_date, $end_date, $limit );
 
 		return rest_ensure_response(
 			array(
@@ -852,11 +883,11 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_product_growth( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
+    public function get_product_growth( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_product_growth_metrics( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_product_growth_trends( $start_date, $end_date );
 
 		return rest_ensure_response(
 			array(
@@ -892,8 +923,8 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_product_lifecycle( $request ) {
-		$data = VGP_EDD_Stats_Query::get_product_lifecycle_analysis();
+    public function get_product_lifecycle( $request ) {
+        $data = VGP_EDD_Stats_Query::get_product_lifecycle_stages();
 
 		return rest_ensure_response(
 			array(
@@ -969,11 +1000,11 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_revenue_per_customer( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
+    public function get_revenue_per_customer( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_average_revenue_per_customer( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_average_revenue_per_customer( $start_date, $end_date );
 
 		return rest_ensure_response(
 			array(
@@ -989,11 +1020,9 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_cash_flow( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
-
-		$data = VGP_EDD_Stats_Query::get_cash_flow_analysis( $start_date, $end_date );
+    public function get_cash_flow( $request ) {
+        // Use projection for next 90 days as a placeholder implementation
+        $data = VGP_EDD_Stats_Query::get_cash_flow_projection( 90 );
 
 		return rest_ensure_response(
 			array(
@@ -1009,11 +1038,11 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_profitability( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
+    public function get_profitability( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_profitability_metrics( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_profitability_by_segment( $start_date, $end_date );
 
 		return rest_ensure_response(
 			array(
@@ -1144,8 +1173,9 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_churn_prediction( $request ) {
-		$data = VGP_EDD_Stats_Query::get_churn_prediction();
+    public function get_churn_prediction( $request ) {
+        // Return top 100 customers with churn risk scores
+        $data = VGP_EDD_Stats_Query::get_churn_prediction_scores( 100 );
 
 		return rest_ensure_response(
 			array(
@@ -1179,11 +1209,11 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_payment_gateways( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
+    public function get_payment_gateways( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_payment_gateway_analysis( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_payment_method_performance( $start_date, $end_date );
 
 		return rest_ensure_response(
 			array(
@@ -1199,11 +1229,11 @@ class VGP_EDD_Stats_API {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response Response object.
 	 */
-	public function get_payment_failures( $request ) {
-		$start_date = $request->get_param( 'start_date' );
-		$end_date   = $request->get_param( 'end_date' );
+    public function get_payment_failures( $request ) {
+        $start_date = $request->get_param( 'start_date' );
+        $end_date   = $request->get_param( 'end_date' );
 
-		$data = VGP_EDD_Stats_Query::get_payment_failure_analysis( $start_date, $end_date );
+        $data = VGP_EDD_Stats_Query::get_failed_payment_recovery( $start_date, $end_date );
 
 		return rest_ensure_response(
 			array(
