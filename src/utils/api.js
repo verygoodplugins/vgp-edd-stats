@@ -155,8 +155,11 @@ export const API = {
 		apiRequest('/renewals/upcoming', { days }),
 
 	// Refunds
-	getRefundRates: (dateRange) =>
-		apiRequest('/refunds/rates', formatDateRange(dateRange)),
+    getRefundRates: (dateRange) =>
+        apiRequest('/refunds/rates', formatDateRange(dateRange)),
+
+    getNewCustomerRefundsByYear: (dateRange) =>
+        apiRequest('/refunds/new-customers-yearly', formatDateRange(dateRange)),
 
 	// Licensing
 	getTopLicenses: (limit = 20) =>

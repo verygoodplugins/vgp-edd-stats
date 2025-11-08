@@ -65,6 +65,14 @@ class VGP_EDD_Stats_Query {
 			// Create new wpdb instance for dev database
 			self::$dev_db = new wpdb( $db_user, $db_pass, $db_name, $db_host );
 
+			// Ensure table prefix and core table names are set for this connection
+			$dev_prefix = defined( 'VGP_EDD_DEV_DB_PREFIX' ) ? VGP_EDD_DEV_DB_PREFIX : 'wp_';
+			if ( method_exists( self::$dev_db, 'set_prefix' ) ) {
+				self::$dev_db->set_prefix( $dev_prefix );
+			} else {
+				self::$dev_db->prefix = $dev_prefix; // Fallback
+			}
+
 			// Check if connection succeeded
 			if ( ! self::$dev_db->dbh ) {
 				// Connection failed, fall back to production database
@@ -410,44 +418,46 @@ class VGP_EDD_Stats_Query {
 	 * @param string $end_date   End date.
 	 * @return array Query results.
 	 */
-	public static function get_renewal_rates_by_month( $start_date = null, $end_date = null ) {
-		$wpdb = self::get_db();
+    public static function get_renewal_rates_by_month( $start_date = null, $end_date = null ) {
+        $wpdb = self::get_db();
 
-		$where = '';
-		if ( $start_date ) {
-			$where .= $wpdb->prepare( ' AND c.date_created >= %s', $start_date );
-		}
-		if ( $end_date ) {
-			$where .= $wpdb->prepare( ' AND c.date_created <= %s', $end_date . ' 23:59:59' );
-		}
+        // Filter by renewal month window (12 months after signup) to respect date ranges
+        $renewalWindowFilter = '';
+        if ( $start_date ) {
+            $renewalWindowFilter .= $wpdb->prepare( " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') >= %s", substr( $start_date, 0, 7 ) );
+        }
+        if ( $end_date ) {
+            $renewalWindowFilter .= $wpdb->prepare( " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') <= %s", substr( $end_date, 0, 7 ) );
+        }
 
-		$query = "
-			SELECT
-				DATE_FORMAT(c.date_created, '%Y-%m-01') AS date,
-				DATE_FORMAT(c.date_created, '%M %Y') AS label,
-				ROUND(
-					100.0 * COUNT(DISTINCT CASE
-						WHEN o.status IN ('complete', 'edd_subscription')
-						AND o.type = 'renewal'
-						AND o.date_created >= DATE_ADD(c.date_created, INTERVAL 1 YEAR)
-						AND o.date_created <= DATE_ADD(c.date_created, INTERVAL 13 MONTH)
-						THEN o.customer_id
-					END) / NULLIF(COUNT(DISTINCT c.id), 0),
-					2
-				) AS renewal_rate
-			FROM {$wpdb->prefix}edd_customers c
-			LEFT JOIN {$wpdb->prefix}edd_orders o ON c.id = o.customer_id
-			WHERE c.date_created >= '2017-01-01'
-			AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
-			{$where}
-			GROUP BY
-				YEAR(c.date_created),
-				MONTH(c.date_created)
-			ORDER BY date
-		";
+        $query = "
+            SELECT
+                renewal_month AS month_year,
+                DATE_FORMAT(STR_TO_DATE(CONCAT(renewal_month, '-01'), '%Y-%m-%d'), '%M %Y') AS label,
+                ROUND(AVG(renewal_rate), 2) AS renewal_rate
+            FROM (
+                SELECT 
+                    DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%Y-%m') AS renewal_month,
+                    100.0 * COUNT(DISTINCT CASE 
+                        WHEN o.status IN ('complete','edd_subscription')
+                         AND o.date_created >= DATE_ADD(c.date_created, INTERVAL 12 MONTH)
+                         AND o.date_created <  DATE_ADD(c.date_created, INTERVAL 13 MONTH)
+                         THEN o.customer_id END) 
+                    / NULLIF(COUNT(DISTINCT c.id), 0) AS renewal_rate
+                FROM {$wpdb->prefix}edd_customers c
+                LEFT JOIN {$wpdb->prefix}edd_orders o ON c.id = o.customer_id
+                WHERE c.date_created >= '2015-01-01'
+                  AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+                  AND NOT (c.purchase_count = 1 AND c.purchase_value >= 847)
+                  {$renewalWindowFilter}
+                GROUP BY DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%Y-%m')
+            ) AS r
+            GROUP BY renewal_month
+            ORDER BY renewal_month
+        ";
 
-		return self::get_cached( 'renewal_rates_' . md5( $query ), $query );
-	}
+        return self::get_cached( 'renewal_rates_' . md5( $query ), $query );
+    }
 
 	/**
 	 * Get upcoming renewals.
@@ -487,8 +497,8 @@ class VGP_EDD_Stats_Query {
 	}
 
 	// =========================
-	// REFUNDS
-	// =========================
+    // REFUNDS
+    // =========================
 
 	/**
 	 * Get refund rates by month.
@@ -497,39 +507,85 @@ class VGP_EDD_Stats_Query {
 	 * @param string $end_date   End date.
 	 * @return array Query results.
 	 */
-	public static function get_refund_rates_by_month( $start_date = null, $end_date = null ) {
-		$wpdb = self::get_db();
+    public static function get_refund_rates_by_month( $start_date = null, $end_date = null ) {
+        $wpdb = self::get_db();
 
 		$where = '';
-		if ( $start_date ) {
-			$where .= $wpdb->prepare( ' AND DATE_FORMAT(o.date_created, "%%Y-%%m") >= %s', substr( $start_date, 0, 7 ) );
-		}
-		if ( $end_date ) {
-			$where .= $wpdb->prepare( ' AND DATE_FORMAT(o.date_created, "%%Y-%%m") <= %s', substr( $end_date, 0, 7 ) );
-		}
+            if ( $start_date ) {
+                $where .= $wpdb->prepare( ' AND DATE_FORMAT(date_created, "%%Y-%%m") >= %s', substr( $start_date, 0, 7 ) );
+            }
+            if ( $end_date ) {
+                $where .= $wpdb->prepare( ' AND DATE_FORMAT(date_created, "%%Y-%%m") <= %s', substr( $end_date, 0, 7 ) );
+            }
 
-		$query = "
-			SELECT
-				month_year,
-				DATE_FORMAT(STR_TO_DATE(CONCAT(month_year, '-01'), '%Y-%m-%d'), '%M %Y') AS label,
-				ROUND(
-					100.0 * SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) / COUNT(*),
-					2
-				) AS refund_rate
-			FROM (
-				SELECT
-					DATE_FORMAT(date_created, '%Y-%m') AS month_year,
-					status
-				FROM {$wpdb->prefix}edd_orders
-				WHERE type = 'sale'
-				{$where}
-			) AS orders
-			GROUP BY month_year
-			ORDER BY month_year
-		";
+			// Calculate refund rate as refunded count divided by (completed + refunded) count per month
+        $query = "
+                SELECT
+                    month_year,
+                    DATE_FORMAT(STR_TO_DATE(CONCAT(month_year, '-01'), '%Y-%m-%d'), '%M %Y') AS label,
+                    COALESCE(ROUND(
+                        100.0 * SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) /
+                        NULLIF(SUM(CASE WHEN status IN ('complete','refunded') THEN 1 ELSE 0 END), 0),
+                        2
+                    ), 0) AS refund_rate
+                FROM (
+                    SELECT
+                        DATE_FORMAT(date_created, '%Y-%m') AS month_year,
+                        status
+                    FROM {$wpdb->prefix}edd_orders
+                    WHERE 1=1
+                    {$where}
+                ) AS orders
+                GROUP BY month_year
+                ORDER BY month_year
+            ";
 
-		return self::get_cached( 'refund_rates_' . md5( $query ), $query );
-	}
+        return self::get_cached( 'refund_rates_' . md5( $query ), $query );
+    }
+
+    /**
+     * Get new customer refund rates by year.
+     * A "new" order is considered where parent = 0.
+     *
+     * @param string $start_date Optional start date (Y-m-d).
+     * @param string $end_date   Optional end date (Y-m-d).
+     * @return array Yearly refund metrics for new customers.
+     */
+    public static function get_new_customer_refund_rates_by_year( $start_date = null, $end_date = null ) {
+        $wpdb = self::get_db();
+
+        $where = '';
+        if ( $start_date ) {
+            $where .= $wpdb->prepare( ' AND date_created >= %s', $start_date );
+        }
+        if ( $end_date ) {
+            $where .= $wpdb->prepare( ' AND date_created <= %s', $end_date );
+        }
+
+        // Default behavior: all years before current year if no explicit range provided
+        if ( ! $start_date && ! $end_date ) {
+            $where .= " AND date_created < DATE(CONCAT(YEAR(CURRENT_DATE), '-01-01'))";
+        }
+
+        $query = "
+            SELECT
+                YEAR(date_created) AS year,
+                COUNT(CASE WHEN parent = 0 THEN 1 ELSE NULL END) AS new_orders,
+                COUNT(CASE WHEN parent = 0 AND status = 'refunded' THEN 1 ELSE NULL END) AS refunded_orders,
+                ROUND(
+                    100.0 * COUNT(CASE WHEN parent = 0 AND status = 'refunded' THEN 1 ELSE NULL END)
+                    / NULLIF(COUNT(CASE WHEN parent = 0 THEN 1 ELSE NULL END), 0),
+                    2
+                ) AS refund_rate
+            FROM {$wpdb->prefix}edd_orders
+            WHERE 1=1
+            {$where}
+            GROUP BY YEAR(date_created)
+            ORDER BY YEAR(date_created)
+        ";
+
+        return self::get_cached( 'new_customer_refunds_year_' . md5( $query ), $query );
+    }
 
 	// =========================
 	// SOFTWARE LICENSING
@@ -1585,11 +1641,11 @@ class VGP_EDD_Stats_Query {
 	}
 
 	// =========================
-	// REVENUE ANALYTICS
-	// =========================
+    // REVENUE ANALYTICS
+    // =========================
 
-	/**
-	 * Get detailed revenue breakdown by type.
+    /**
+     * Get detailed revenue breakdown by type.
 	 *
 	 * @param string $start_date Start date.
 	 * @param string $end_date   End date.
@@ -1714,14 +1770,47 @@ class VGP_EDD_Stats_Query {
 			) AS top_products
 		";
 
-		return self::get_cached( 'revenue_concentration', $query );
-	}
+        return self::get_cached( 'revenue_concentration', $query );
+    }
 
-	/**
-	 * Get payment method performance.
-	 *
-	 * @param string $start_date Start date.
-	 * @param string $end_date   End date.
+    /**
+     * Get average revenue per customer by month.
+     *
+     * @param string $start_date Start date.
+     * @param string $end_date   End date.
+     * @return array Monthly average revenue per customer.
+     */
+    public static function get_average_revenue_per_customer( $start_date = null, $end_date = null ) {
+        $wpdb = self::get_db();
+
+        $where = " AND o.status IN ('complete', 'edd_subscription')";
+        if ( $start_date ) {
+            $where .= $wpdb->prepare( ' AND o.date_created >= %s', $start_date );
+        }
+        if ( $end_date ) {
+            $where .= $wpdb->prepare( ' AND o.date_created <= %s', $end_date );
+        }
+
+        $query = "
+            SELECT
+                DATE_FORMAT(o.date_created, '%Y-%m-01') AS date,
+                DATE_FORMAT(o.date_created, '%M %Y') AS label,
+                ROUND(SUM(o.total) / NULLIF(COUNT(DISTINCT o.customer_id), 0), 2) AS avg_revenue_per_customer
+            FROM {$wpdb->prefix}edd_orders o
+            WHERE 1=1
+            {$where}
+            GROUP BY YEAR(o.date_created), MONTH(o.date_created)
+            ORDER BY date
+        ";
+
+        return self::get_cached( 'avg_rev_per_customer_' . md5( $query ), $query );
+    }
+
+    /**
+     * Get payment method performance.
+     *
+     * @param string $start_date Start date.
+     * @param string $end_date   End date.
 	 * @return array Success rates and revenue by payment gateway.
 	 */
 	public static function get_payment_method_performance( $start_date = null, $end_date = null ) {

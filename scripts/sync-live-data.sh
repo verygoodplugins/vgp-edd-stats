@@ -35,14 +35,24 @@ DATA_DIR="$PLUGIN_DIR/data"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 DUMP_FILE="$DATA_DIR/edd-dump-$TIMESTAMP.sql"
 
-# EDD tables to sync
+# Tables to sync (minimum set required by queries)
+# Note: We include select WP core tables that queries join against
+# to enable local analytics without hitting the main WP DB.
 EDD_TABLES=(
+    # Core EDD data
     "wp_edd_customers"
     "wp_edd_orders"
     "wp_edd_subscriptions"
     "wp_edd_licenses"
     "wp_edd_license_activations"
     "wp_edd_customermeta"
+    "wp_edd_order_items"
+    "wp_edd_customer_email_addresses"
+
+    # WP core tables referenced by queries
+    "wp_posts"
+    "wp_postmeta"
+    "wp_comments"
 )
 
 ###############################################################################
