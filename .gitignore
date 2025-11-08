@@ -28,4 +28,4 @@ dev-config.php
 data/edd-dump-*.sql
 scripts/.env
 /.playwright-mcp
-#EDD-Appsmith-Stats/
+/EDD-Appsmith-Stats
