@@ -447,20 +447,27 @@ class VGP_EDD_Stats_Query {
         $wpdb = self::get_db();
 
         // Optional filter based on renewal month (12 months after signup)
+        $renewal_window = (int) self::RENEWAL_WINDOW_MONTHS;
         $filter = '';
         if ( $start_date ) {
             $filter .= $wpdb->prepare(
-                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') >= %s",
+                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL %d MONTH), '%%Y-%%m') >= %s",
+                $renewal_window,
                 substr( $start_date, 0, 7 )
             );
         }
         if ( $end_date ) {
             $filter .= $wpdb->prepare(
-                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%%Y-%%m') <= %s",
+                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL %d MONTH), '%%Y-%%m') <= %s",
+                $renewal_window,
                 substr( $end_date, 0, 7 )
             );
         }
 
+        $renewal_window_plus_one = $renewal_window + 1;
+        $cutoff_date = self::HISTORICAL_DATA_CUTOFF_DATE;
+        $threshold = (float) self::EXCLUSION_PURCHASE_VALUE_THRESHOLD;
+        
         $query = "
             SELECT
                 renewal_month AS month_year,
@@ -468,20 +475,20 @@ class VGP_EDD_Stats_Query {
                 ROUND(AVG(renewal_rate), 2) AS renewal_rate
             FROM (
                 SELECT
-                    DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%Y-%m') AS renewal_month,
+                    DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL {$renewal_window} MONTH), '%Y-%m') AS renewal_month,
                     100.0 * COUNT(DISTINCT CASE
                         WHEN o.status IN ('complete','edd_subscription')
-                         AND o.date_created >= DATE_ADD(c.date_created, INTERVAL 12 MONTH)
-                         AND o.date_created <  DATE_ADD(c.date_created, INTERVAL 13 MONTH)
+                         AND o.date_created >= DATE_ADD(c.date_created, INTERVAL {$renewal_window} MONTH)
+                         AND o.date_created <  DATE_ADD(c.date_created, INTERVAL {$renewal_window_plus_one} MONTH)
                          THEN o.customer_id END)
                     / NULLIF(COUNT(DISTINCT c.id), 0) AS renewal_rate
                 FROM {$wpdb->prefix}edd_customers c
                 LEFT JOIN {$wpdb->prefix}edd_orders o ON c.id = o.customer_id
-                WHERE c.date_created >= '2015-01-01'
-                  AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-                  AND NOT (c.purchase_count = 1 AND c.purchase_value >= 847)
+                WHERE c.date_created >= '{$cutoff_date}'
+                  AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL {$renewal_window} MONTH)
+                  AND NOT (c.purchase_count = 1 AND c.purchase_value >= {$threshold})
                   {$filter}
-                GROUP BY DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL 12 MONTH), '%Y-%m')
+                GROUP BY DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL {$renewal_window} MONTH), '%Y-%m')
             ) AS r
             GROUP BY renewal_month
             ORDER BY renewal_month

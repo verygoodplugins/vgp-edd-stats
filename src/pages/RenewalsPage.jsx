@@ -104,7 +104,7 @@ function RenewalsPage({ dateRange }) {
                 title="First Year Renewal Rates"
                 subtitle="Percentage of customers who renewed after first year"
                 option={renewalChartOption}
-                loading={renewalLoading && renewalAllLoading}
+                loading={renewalLoading || renewalAllLoading}
                 height={400}
             />
 		</div>

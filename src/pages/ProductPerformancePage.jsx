@@ -433,7 +433,7 @@ function ProductPerformancePage({ dateRange }) {
     // Omitted sections until endpoints exist
     const crossSellLoading = false, lifecycleLoading = false, profitabilityLoading = false;
 
-    const isLoading = (matrixLoading && matrixAllLoading) || topLoading;
+    const isLoading = (matrixLoading || matrixAllLoading) || topLoading;
 
     if (isLoading) {
         return (
