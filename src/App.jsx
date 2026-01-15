@@ -16,11 +16,7 @@ import { subDays, subMonths } from 'date-fns';
 
 function App({ section }) {
 	// Global date range state
-	const [dateRange, setDateRange] = useState({
-		startDate: subMonths(new Date(), 12),
-		endDate: new Date(),
-		preset: '365',
-	});
+	const [dateRange, setDateRange] = useState(() => getInitialDateRange());
 
 	// Render appropriate page based on section
 	const renderPage = () => {
@@ -100,3 +96,30 @@ function getSectionTitle(section) {
 }
 
 export default App;
+
+function getInitialDateRange() {
+	const configuredPreset =
+		typeof window !== 'undefined' &&
+		window.vgpEddStats &&
+		typeof window.vgpEddStats.defaultRange === 'string'
+			? window.vgpEddStats.defaultRange
+			: null;
+
+	const preset = ['30', '90', '365', 'all'].includes(configuredPreset)
+		? configuredPreset
+		: '365';
+
+	if (preset === 'all') {
+		return { startDate: null, endDate: null, preset: 'all' };
+	}
+
+	if (preset === '30') {
+		return { startDate: subDays(new Date(), 30), endDate: new Date(), preset: '30' };
+	}
+
+	if (preset === '90') {
+		return { startDate: subDays(new Date(), 90), endDate: new Date(), preset: '90' };
+	}
+
+	return { startDate: subMonths(new Date(), 12), endDate: new Date(), preset: '365' };
+}

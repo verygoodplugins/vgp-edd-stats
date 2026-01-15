@@ -113,6 +113,18 @@ final class VGP_EDD_Stats {
 			return;
 		}
 
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+
+		// Don't load the dashboard bundle on the settings screen.
+		if ( 'vgp-edd-stats-settings' === $page ) {
+			return;
+		}
+
+		// If EDD isn't active, avoid calling EDD helpers.
+		if ( ! class_exists( 'Easy_Digital_Downloads' ) ) {
+			return;
+		}
+
 		// Enqueue styles.
 		wp_enqueue_style(
 			'vgp-edd-stats',
@@ -145,6 +157,7 @@ final class VGP_EDD_Stats {
 				'nonce'        => wp_create_nonce( 'wp_rest' ),
 				'dateFormat'   => get_option( 'date_format' ),
 				'currencyCode' => edd_get_currency(),
+				'defaultRange' => get_option( 'vgp_edd_stats_default_range', '365' ),
 				'version'      => VGP_EDD_STATS_VERSION,
 			)
 		);

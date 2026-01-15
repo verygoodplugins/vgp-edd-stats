@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import DatePicker from 'react-datepicker';
 import { subDays, subMonths, startOfYear } from 'date-fns';
 import 'react-datepicker/dist/react-datepicker.css';
 
 const PRESETS = [
+	{ label: 'All Time', value: 'all', getDates: () => ({ startDate: null, endDate: null }) },
 	{ label: 'Last 30 Days', value: '30', getDates: () => ({ startDate: subDays(new Date(), 30), endDate: new Date() }) },
 	{ label: 'Last 90 Days', value: '90', getDates: () => ({ startDate: subDays(new Date(), 90), endDate: new Date() }) },
 	{ label: 'Last 12 Months', value: '365', getDates: () => ({ startDate: subMonths(new Date(), 12), endDate: new Date() }) },
@@ -16,8 +17,16 @@ function DateRangeFilter({ dateRange, onChange }) {
 	const [tempStartDate, setTempStartDate] = useState(dateRange.startDate);
 	const [tempEndDate, setTempEndDate] = useState(dateRange.endDate);
 
+	useEffect(() => {
+		if (showCustom) return;
+		setTempStartDate(dateRange.startDate);
+		setTempEndDate(dateRange.endDate);
+	}, [dateRange.startDate, dateRange.endDate, showCustom]);
+
 	const handlePresetChange = (preset) => {
 		if (preset.value === 'custom') {
+			setTempStartDate(dateRange.startDate);
+			setTempEndDate(dateRange.endDate);
 			setShowCustom(true);
 			return;
 		}
@@ -27,6 +36,8 @@ function DateRangeFilter({ dateRange, onChange }) {
 			...dates,
 			preset: preset.value,
 		});
+		setTempStartDate(dates.startDate);
+		setTempEndDate(dates.endDate);
 		setShowCustom(false);
 	};
 

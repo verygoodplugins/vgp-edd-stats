@@ -24,7 +24,7 @@ const getConfig = () => {
  */
 export async function apiRequest(endpoint, params = {}) {
 	const config = getConfig();
-	const url = new URL(`${config.apiUrl}${endpoint}`);
+	const url = new URL(`${config.apiUrl}${endpoint}`, window.location.origin);
 
 	// Add query parameters
 	Object.keys(params).forEach(key => {
@@ -35,6 +35,7 @@ export async function apiRequest(endpoint, params = {}) {
 
 	const response = await fetch(url, {
 		method: 'GET',
+		credentials: 'same-origin',
 		headers: {
 			'Content-Type': 'application/json',
 			'X-WP-Nonce': config.nonce,
@@ -155,48 +156,25 @@ export const API = {
 		apiRequest('/renewals/upcoming', { days }),
 
 	// Refunds
-    getRefundRates: (dateRange) =>
-        apiRequest('/refunds/rates', formatDateRange(dateRange)),
+	getRefundRates: (dateRange) =>
+		apiRequest('/refunds/rates', formatDateRange(dateRange)),
 
-    getNewCustomerRefundsByYear: (dateRange) =>
-        apiRequest('/refunds/new-customers-yearly', formatDateRange(dateRange)),
+	getNewCustomerRefundsByYear: (dateRange) =>
+		apiRequest('/refunds/new-customers-yearly', formatDateRange(dateRange)),
 
 	// Licensing
 	getTopLicenses: (limit = 20) =>
 		apiRequest('/licenses/top', { limit }),
 
-    // Customer Analytics
-    // New, server-backed endpoints
-    getCustomerCLV: (limit = 50) =>
-        apiRequest('/customers/clv', { limit }),
+	// Customer Analytics
+	getCustomerCLV: (limit = 50) =>
+		apiRequest('/customers/clv', { limit }),
 
-    getCustomerRFMReal: () =>
-        apiRequest('/customers/rfm'),
+	getCustomerRFM: () =>
+		apiRequest('/customers/rfm'),
 
-    getCustomerHealthReal: () =>
-        apiRequest('/customers/health'),
-
-    // Legacy placeholders (unused now)
-    getCustomerLifetimeValue: (dateRange) =>
-        apiRequest('/customers/lifetime-value', formatDateRange(dateRange)),
-
-	getCustomerRetentionRate: (dateRange) =>
-		apiRequest('/customers/retention-rate', formatDateRange(dateRange)),
-
-	getCustomerChurnAnalysis: (dateRange) =>
-		apiRequest('/customers/churn-analysis', formatDateRange(dateRange)),
-
-	getCustomerSegmentation: (dateRange) =>
-		apiRequest('/customers/segmentation', formatDateRange(dateRange)),
-
-    getCustomerRFM: (dateRange) =>
-        apiRequest('/customers/rfm', formatDateRange(dateRange)),
-
-	getAverageOrderValue: (dateRange) =>
-		apiRequest('/customers/aov', formatDateRange(dateRange)),
-
-    getCustomerHealth: (dateRange) =>
-        apiRequest('/customers/health', formatDateRange(dateRange)),
+	getCustomerHealth: () =>
+		apiRequest('/customers/health'),
 
     // Product Performance
     getTopProducts: (dateRange, limit = 10) =>

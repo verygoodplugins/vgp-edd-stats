@@ -5,84 +5,106 @@ import StatCard from '../components/StatCard';
 import ChartWrapper from '../components/ChartWrapper';
 
 function CustomerAnalyticsPage() {
-    // Fetch real data
-    const { data: clv, isLoading: clvLoading } = useQuery({
-        queryKey: ['customer-clv-top'],
-        queryFn: () => API.getCustomerCLV(50),
-    });
+	// Fetch real data.
+	const { data: clv, isLoading: clvLoading } = useQuery({
+		queryKey: ['customer-clv-top'],
+		queryFn: () => API.getCustomerCLV(50),
+	});
 
-    const { data: rfm, isLoading: rfmLoading } = useQuery({
-        queryKey: ['customer-rfm'],
-        queryFn: () => API.getCustomerRFMReal(),
-    });
+	const { data: rfm, isLoading: rfmLoading } = useQuery({
+		queryKey: ['customer-rfm'],
+		queryFn: () => API.getCustomerRFM(),
+	});
 
-    const { data: health, isLoading: healthLoading } = useQuery({
-        queryKey: ['customer-health'],
-        queryFn: () => API.getCustomerHealthReal(),
-    });
+	const { data: health, isLoading: healthLoading } = useQuery({
+		queryKey: ['customer-health'],
+		queryFn: () => API.getCustomerHealth(),
+	});
 
-    // Summary metrics
-    const summary = useMemo(() => {
-        if (!clv || !rfm || !health) return null;
-        const totalCustomers = new Set([...(rfm || []).map(r => r.customer_id), ...(clv || []).map(c => c.customer_id)]).size;
-        const avgCLV = clv.length ? clv.reduce((s, c) => s + parseFloat(c.total_spent || 0), 0) / clv.length : 0;
-        const atRisk = (health || []).filter(h => (h.health_status || '').toLowerCase().includes('risk')).length;
-        return { totalCustomers, avgCLV, atRisk };
-    }, [clv, rfm, health]);
+	// Summary metrics.
+	const summary = useMemo(() => {
+		if (!clv || !rfm || !health) return null;
 
-    // RFM segment summary (bucket using scores)
-    const rfmSegOption = useMemo(() => {
-        if (!rfm) return null;
-        const buckets = {
-            Champions: 0,
-            'Loyal Customers': 0,
-            'Big Spenders': 0,
-            'Recent Customers': 0,
-            'At Risk': 0,
-            Lost: 0,
-            Potential: 0,
-        };
-        rfm.forEach(r => {
-            const total = (parseInt(r.recency_score) || 0) + (parseInt(r.frequency_score) || 0) + (parseInt(r.monetary_score) || 0);
-            if (total >= 13) buckets['Champions']++;
-            else if (total >= 10 && (parseInt(r.recency_score) || 0) >= 4) buckets['Loyal Customers']++;
-            else if ((parseInt(r.monetary_score) || 0) >= 4 && ((parseInt(r.recency_score) || 0) + (parseInt(r.frequency_score) || 0)) >= 6) buckets['Big Spenders']++;
-            else if ((parseInt(r.recency_score) || 0) >= 4 && (parseInt(r.frequency_score) || 0) <= 2) buckets['Recent Customers']++;
-            else if ((parseInt(r.frequency_score) || 0) >= 4 && (parseInt(r.recency_score) || 0) <= 2) buckets['At Risk']++;
-            else if ((parseInt(r.recency_score) || 0) <= 2 && (parseInt(r.frequency_score) || 0) <= 2) buckets['Lost']++;
-            else buckets['Potential']++;
-        });
-        return {
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: Object.keys(buckets), axisLabel: { rotate: 20 } },
-            yAxis: { type: 'value' },
-            series: [{ type: 'bar', data: Object.values(buckets), itemStyle: { color: '#0ea5e9' } }],
-        };
-    }, [rfm]);
+		const totalCustomers = new Set([
+			...(rfm || []).map(r => r.customer_id),
+			...(clv || []).map(c => c.customer_id),
+		]).size;
+		const avgCLV = clv.length
+			? clv.reduce((sum, c) => sum + parseFloat(c.total_spent || 0), 0) / clv.length
+			: 0;
+		const atRisk = (health || []).filter(h =>
+			(h.health_status || '').toLowerCase().includes('risk')
+		).length;
 
-    // Health distribution
-    const healthOption = useMemo(() => {
-        if (!health) return null;
-        const groups = {};
-        health.forEach(h => {
-            const key = (h.health_status || 'Unknown');
-            groups[key] = (groups[key] || 0) + 1;
-        });
-        const data = Object.entries(groups).map(([name, value]) => ({ name, value }));
-        return {
-            tooltip: { trigger: 'item' },
-            series: [{ type: 'pie', radius: '60%', data }],
-        };
-    }, [health]);
+		return { totalCustomers, avgCLV, atRisk };
+	}, [clv, rfm, health]);
 
-    // Top CLV table rows
-    const topRows = (clv || []).map(c => ({
-        id: c.customer_id,
-        name: c.name || c.email,
-        total: parseFloat(c.total_spent || 0),
-        aov: parseFloat(c.avg_order_value || 0),
-        orders: parseInt(c.purchase_count || 0, 10),
-    }));
+	// RFM segment summary (bucket using scores).
+	const rfmSegOption = useMemo(() => {
+		if (!rfm) return null;
+
+		const buckets = {
+			Champions: 0,
+			'Loyal Customers': 0,
+			'Big Spenders': 0,
+			'Recent Customers': 0,
+			'At Risk': 0,
+			Lost: 0,
+			Potential: 0,
+		};
+
+		rfm.forEach(r => {
+			const total =
+				(parseInt(r.recency_score) || 0) +
+				(parseInt(r.frequency_score) || 0) +
+				(parseInt(r.monetary_score) || 0);
+
+			if (total >= 13) buckets['Champions']++;
+			else if (total >= 10 && (parseInt(r.recency_score) || 0) >= 4) buckets['Loyal Customers']++;
+			else if (
+				(parseInt(r.monetary_score) || 0) >= 4 &&
+				((parseInt(r.recency_score) || 0) + (parseInt(r.frequency_score) || 0)) >= 6
+			) buckets['Big Spenders']++;
+			else if ((parseInt(r.recency_score) || 0) >= 4 && (parseInt(r.frequency_score) || 0) <= 2) buckets['Recent Customers']++;
+			else if ((parseInt(r.frequency_score) || 0) >= 4 && (parseInt(r.recency_score) || 0) <= 2) buckets['At Risk']++;
+			else if ((parseInt(r.recency_score) || 0) <= 2 && (parseInt(r.frequency_score) || 0) <= 2) buckets['Lost']++;
+			else buckets['Potential']++;
+		});
+
+		return {
+			tooltip: { trigger: 'axis' },
+			xAxis: { type: 'category', data: Object.keys(buckets), axisLabel: { rotate: 20 } },
+			yAxis: { type: 'value' },
+			series: [{ type: 'bar', data: Object.values(buckets), itemStyle: { color: '#0ea5e9' } }],
+		};
+	}, [rfm]);
+
+	// Health distribution.
+	const healthOption = useMemo(() => {
+		if (!health) return null;
+
+		const groups = {};
+		health.forEach(h => {
+			const key = (h.health_status || 'Unknown');
+			groups[key] = (groups[key] || 0) + 1;
+		});
+
+		const data = Object.entries(groups).map(([name, value]) => ({ name, value }));
+
+		return {
+			tooltip: { trigger: 'item' },
+			series: [{ type: 'pie', radius: '60%', data }],
+		};
+	}, [health]);
+
+	// Top CLV table rows.
+	const topRows = (clv || []).map(c => ({
+		id: c.customer_id,
+		name: c.name || c.email,
+		total: parseFloat(c.total_spent || 0),
+		aov: parseFloat(c.avg_order_value || 0),
+		orders: parseInt(c.purchase_count || 0, 10),
+	}));
 
     return (
         <div className="space-y-6">
