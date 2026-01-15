@@ -755,18 +755,51 @@ else
     print_warning "Anonymization script not found: $ANON_SQL"
 fi
 
-# Step 9: Record sync completion
+# Step 9: Clear plugin cache (transients)
+print_step "Clearing VGP EDD Stats cache..."
+
+# Find WordPress database to clear transients from
+WP_CONFIG_PATH="$(find_wp_config)"
+if [ -n "$WP_CONFIG_PATH" ]; then
+    WP_DB_NAME="$(extract_define 'DB_NAME' "$WP_CONFIG_PATH")"
+    WP_DB_PREFIX="$(extract_table_prefix "$WP_CONFIG_PATH")"
+    WP_DB_PREFIX="${WP_DB_PREFIX:-wp_}"
+
+    if [ -n "$WP_DB_NAME" ]; then
+        # Delete all VGP EDD Stats transients from WordPress database
+        DELETED_COUNT=$("$MYSQL_BIN" "${MYSQL_ARGS[@]}" "$WP_DB_NAME" -N -e "
+            SELECT COUNT(*) FROM ${WP_DB_PREFIX}options
+            WHERE option_name LIKE '_transient_vgp_edd_stats_%'
+            OR option_name LIKE '_transient_timeout_vgp_edd_stats_%'
+        " 2>/dev/null || echo "0")
+
+        "$MYSQL_BIN" "${MYSQL_ARGS[@]}" "$WP_DB_NAME" -e "
+            DELETE FROM ${WP_DB_PREFIX}options
+            WHERE option_name LIKE '_transient_vgp_edd_stats_%'
+            OR option_name LIKE '_transient_timeout_vgp_edd_stats_%'
+        " 2>/dev/null || true
+
+        print_success "Cleared $DELETED_COUNT cached transients"
+    else
+        print_warning "Could not determine WordPress database name"
+    fi
+else
+    print_warning "Could not find wp-config.php to clear cache"
+fi
+
+# Step 10: Record sync completion
 SYNC_LOG="$DATA_DIR/last-sync.log"
 cat > "$SYNC_LOG" <<EOF
 Last sync completed: $(date)
 Dump file: $DUMP_FILE
 Tables synced: ${EXISTING_TABLES[@]}
 Dump size: $DUMP_SIZE
+Cache cleared: Yes
 EOF
 
 print_success "Sync log updated: $SYNC_LOG"
 
-# Step 10: Clean up old dumps (keep last 3)
+# Step 11: Clean up old dumps (keep last 3)
 print_step "Cleaning up old dump files..."
 cd "$DATA_DIR"
 ls -t edd-dump-*.sql 2>/dev/null | tail -n +4 | xargs -r rm -f
@@ -785,5 +818,6 @@ echo ""
 echo "Next steps:"
 echo "1. Copy dev-config-sample.php to dev-config.php (if not already done)"
 echo "2. The plugin will automatically use $LOCAL_DEV_DB when dev-config.php exists"
-echo "3. Build and test: npm run build"
+echo "3. Plugin cache has been cleared - fresh data will load immediately"
+echo "4. Build and test: npm run build"
 echo ""
