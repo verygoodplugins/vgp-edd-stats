@@ -98,16 +98,18 @@ class VGP_EDD_Stats_Query {
 				self::$dev_db->prefix = $dev_prefix; // Fallback
 			}
 
-			// Check if connection succeeded
-			if ( ! self::$dev_db->dbh ) {
-				// Connection failed, fall back to production database
-				error_log( 'VGP EDD Stats: Failed to connect to dev database. Falling back to production database.' );
-				if ( ! empty( self::$dev_db->error ) ) {
-					error_log( 'VGP EDD Stats: Connection error: ' . self::$dev_db->error->get_error_message() );
-				}
-				global $wpdb;
-				self::$dev_db = $wpdb;
-			} else {
+				// Check if connection succeeded
+				if ( ! self::$dev_db->dbh ) {
+					// Connection failed, fall back to production database
+					error_log( 'VGP EDD Stats: Failed to connect to dev database. Falling back to production database.' );
+					if ( ! empty( self::$dev_db->last_error ) && is_string( self::$dev_db->last_error ) ) {
+						error_log( 'VGP EDD Stats: Connection error: ' . self::$dev_db->last_error );
+					} elseif ( ! empty( self::$dev_db->error ) && is_string( self::$dev_db->error ) ) {
+						error_log( 'VGP EDD Stats: Connection error: ' . self::$dev_db->error );
+					}
+					global $wpdb;
+					self::$dev_db = $wpdb;
+				} else {
 				// Set charset for dev database
 				self::$dev_db->set_charset( self::$dev_db->dbh );
 			}

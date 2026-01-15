@@ -40,6 +40,45 @@ class VGP_EDD_Stats_Admin_Page {
 	 */
 	private function __construct() {
 		add_action( 'admin_menu', array( $this, 'add_menu_pages' ) );
+		add_action( 'admin_init', array( $this, 'register_settings' ) );
+	}
+
+	/**
+	 * Register plugin settings so they can be saved via options.php.
+	 */
+	public function register_settings() {
+		register_setting(
+			'vgp_edd_stats_settings',
+			'vgp_edd_stats_cache_duration',
+			array(
+				'type'              => 'integer',
+				'sanitize_callback' => 'absint',
+				'default'           => 3600,
+			)
+		);
+
+		register_setting(
+			'vgp_edd_stats_settings',
+			'vgp_edd_stats_default_range',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_default_range' ),
+				'default'           => '365',
+			)
+		);
+	}
+
+	/**
+	 * Sanitize default date range setting.
+	 *
+	 * @param string $value Raw value.
+	 * @return string Sanitized value.
+	 */
+	public function sanitize_default_range( $value ) {
+		$value   = sanitize_text_field( $value );
+		$allowed = array( '30', '90', '365', 'all' );
+
+		return in_array( $value, $allowed, true ) ? $value : '365';
 	}
 
 	/**
@@ -58,16 +97,16 @@ class VGP_EDD_Stats_Admin_Page {
 		);
 
 		// Subpages for each stats section.
-        // Keep only the pages that existed in the original Appsmith dashboards
-        $subpages = array(
-            'customers-revenue'      => __( 'Customers & Revenue', 'vgp-edd-stats' ),
-            'mrr-growth'             => __( 'MRR & Growth', 'vgp-edd-stats' ),
-            'renewals'               => __( 'Renewals & Cancellations', 'vgp-edd-stats' ),
-            'refunds'                => __( 'Refunds', 'vgp-edd-stats' ),
-            'licensing'              => __( 'Software Licensing', 'vgp-edd-stats' ),
-            'sites'                  => __( 'Sites Stats', 'vgp-edd-stats' ),
-            'support'                => __( 'Support', 'vgp-edd-stats' ),
-        );
+		// Keep only the pages that existed in the original Appsmith dashboards.
+		$subpages = array(
+			'customers-revenue' => __( 'Customers & Revenue', 'vgp-edd-stats' ),
+			'mrr-growth'        => __( 'MRR & Growth', 'vgp-edd-stats' ),
+			'renewals'          => __( 'Renewals & Cancellations', 'vgp-edd-stats' ),
+			'refunds'           => __( 'Refunds', 'vgp-edd-stats' ),
+			'licensing'         => __( 'Software Licensing', 'vgp-edd-stats' ),
+			'sites'             => __( 'Sites Stats', 'vgp-edd-stats' ),
+			'support'           => __( 'Support', 'vgp-edd-stats' ),
+		);
 
 		foreach ( $subpages as $slug => $title ) {
 			add_submenu_page(
@@ -195,19 +234,26 @@ class VGP_EDD_Stats_Admin_Page {
 		</div>
 		<script>
 		document.getElementById('vgp-edd-stats-clear-cache').addEventListener('click', function() {
-			if (confirm('<?php esc_html_e( 'Are you sure you want to clear all cached stats data?', 'vgp-edd-stats' ); ?>')) {
-				fetch('<?php echo esc_url( rest_url( 'vgp-edd-stats/v1/cache/clear' ) ); ?>', {
+			const confirmText = <?php echo wp_json_encode( __( 'Are you sure you want to clear all cached stats data?', 'vgp-edd-stats' ) ); ?>;
+			const successText = <?php echo wp_json_encode( __( 'Cache cleared successfully!', 'vgp-edd-stats' ) ); ?>;
+			const errorText = <?php echo wp_json_encode( __( 'Error clearing cache.', 'vgp-edd-stats' ) ); ?>;
+			const endpointUrl = <?php echo wp_json_encode( rest_url( 'vgp-edd-stats/v1/cache/clear' ) ); ?>;
+			const nonce = <?php echo wp_json_encode( wp_create_nonce( 'wp_rest' ) ); ?>;
+
+			if (confirm(confirmText)) {
+				fetch(endpointUrl, {
 					method: 'POST',
+					credentials: 'same-origin',
 					headers: {
-						'X-WP-Nonce': '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>'
+						'X-WP-Nonce': nonce
 					}
 				})
 				.then(response => response.json())
 				.then(data => {
-					alert(data.message || '<?php esc_html_e( 'Cache cleared successfully!', 'vgp-edd-stats' ); ?>');
+					alert(data.message || successText);
 				})
 				.catch(error => {
-					alert('<?php esc_html_e( 'Error clearing cache.', 'vgp-edd-stats' ); ?>');
+					alert(errorText);
 				});
 			}
 		});
