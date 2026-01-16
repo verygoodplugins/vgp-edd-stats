@@ -12,7 +12,13 @@ const PRESETS = [
 	{ label: 'Custom', value: 'custom', getDates: () => null },
 ];
 
-function DateRangeFilter({ dateRange, onChange }) {
+const COMPARISON_MODES = [
+	{ label: 'vs Previous Period', value: 'previous' },
+	{ label: 'vs Year Ago', value: 'yoy' },
+	{ label: 'No Comparison', value: 'none' },
+];
+
+function DateRangeFilter({ dateRange, onChange, comparisonMode = 'previous', onComparisonChange }) {
 	const [showCustom, setShowCustom] = useState(false);
 	const [tempStartDate, setTempStartDate] = useState(dateRange.startDate);
 	const [tempEndDate, setTempEndDate] = useState(dateRange.endDate);
@@ -51,24 +57,47 @@ function DateRangeFilter({ dateRange, onChange }) {
 	};
 
 	return (
-		<div className="flex items-center gap-3">
-			<label className="text-sm font-medium text-gray-700">Date Range:</label>
+		<div className="flex flex-wrap items-center gap-3">
+			<div className="flex items-center gap-3">
+				<label className="text-sm font-medium text-gray-700">Date Range:</label>
 
-			<div className="flex items-center gap-2">
-				{PRESETS.map((preset) => (
-					<button
-						key={preset.value}
-						onClick={() => handlePresetChange(preset)}
-						className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-							dateRange.preset === preset.value
-								? 'bg-primary-600 text-white'
-								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-						}`}
-					>
-						{preset.label}
-					</button>
-				))}
+				<div className="flex items-center gap-2">
+					{PRESETS.map((preset) => (
+						<button
+							key={preset.value}
+							onClick={() => handlePresetChange(preset)}
+							className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+								dateRange.preset === preset.value
+									? 'bg-primary-600 text-white'
+									: 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+							}`}
+						>
+							{preset.label}
+						</button>
+					))}
+				</div>
 			</div>
+
+			{onComparisonChange && (
+				<div className="flex items-center gap-3 border-l border-gray-300 pl-3">
+					<label className="text-sm font-medium text-gray-700">Compare:</label>
+					<div className="flex items-center gap-1">
+						{COMPARISON_MODES.map((mode) => (
+							<button
+								key={mode.value}
+								onClick={() => onComparisonChange(mode.value)}
+								className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+									comparisonMode === mode.value
+										? 'bg-sky-600 text-white'
+										: 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+								}`}
+							>
+								{mode.label}
+							</button>
+						))}
+					</div>
+				</div>
+			)}
 
 			{showCustom && (
 				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

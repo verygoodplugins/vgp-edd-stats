@@ -126,6 +126,23 @@ export function formatPercentage(value, decimals = 1) {
 	return `${value.toFixed(decimals)}%`;
 }
 
+/**
+ * Get comparison label for display.
+ *
+ * @param {string} comparisonMode The comparison mode: 'previous', 'yoy', or 'none'.
+ * @return {string} Human-readable comparison label.
+ */
+export function getComparisonLabel(comparisonMode) {
+	switch (comparisonMode) {
+		case 'yoy':
+			return 'vs same period last year';
+		case 'previous':
+			return 'vs previous period';
+		default:
+			return '';
+	}
+}
+
 // API endpoints
 export const API = {
 	// Customers and Revenue
@@ -135,8 +152,20 @@ export const API = {
 	getCustomersYoY: () =>
 		apiRequest('/customers/yoy-change'),
 
+	getCustomersComparison: (dateRange, comparisonMode = 'previous') =>
+		apiRequest('/customers/comparison', {
+			...formatDateRange(dateRange),
+			compare_to: comparisonMode,
+		}),
+
 	getRevenueByMonth: (dateRange) =>
 		apiRequest('/revenue/by-month', formatDateRange(dateRange)),
+
+	getRevenueComparison: (dateRange, comparisonMode = 'previous') =>
+		apiRequest('/revenue/comparison', {
+			...formatDateRange(dateRange),
+			compare_to: comparisonMode,
+		}),
 
 	getRefundedRevenue: (dateRange) =>
 		apiRequest('/revenue/refunded', formatDateRange(dateRange)),

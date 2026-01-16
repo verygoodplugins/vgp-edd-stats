@@ -285,8 +285,8 @@ function ExecutiveOverviewPage({ dateRange }) {
         return alerts;
     }, [summaryData, churnData, mrrData]);
 
-    // Loading state
-    if (summaryLoading || revenueLoading || mrrLoading) {
+    // Loading state - check all data sources
+    if (summaryLoading || revenueLoading || mrrLoading || churnLoading || customerLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="text-center">
@@ -338,7 +338,7 @@ function ExecutiveOverviewPage({ dateRange }) {
                         {sparklineOption && (
                             <div className="mt-4 bg-white bg-opacity-20 rounded-lg p-4">
                                 <ReactECharts option={sparklineOption} style={{ height: '100px' }} />
-                                <p className="text-xs mt-2 opacity-75">30-Day Revenue Trend</p>
+                                <p className="text-xs mt-2 opacity-75">Revenue Trend ({dateRange?.preset === 'all' ? 'All Time' : `Last ${revenueData?.data?.daily_revenue?.length || 0} days`})</p>
                             </div>
                         )}
                     </div>

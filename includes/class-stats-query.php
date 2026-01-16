@@ -189,11 +189,96 @@ class VGP_EDD_Stats_Query {
 	}
 
 	// =========================
+	// GRANULARITY HELPERS
+	// =========================
+
+	/**
+	 * Calculate appropriate granularity based on date range.
+	 *
+	 * @param string $start_date Start date (Y-m-d format).
+	 * @param string $end_date   End date (Y-m-d format).
+	 * @return string Granularity: 'day', 'week', or 'month'.
+	 */
+	private static function get_granularity( $start_date, $end_date ) {
+		if ( ! $start_date || ! $end_date ) {
+			return 'month'; // Default to month for unbounded queries.
+		}
+
+		$days = ( strtotime( $end_date ) - strtotime( $start_date ) ) / 86400;
+
+		if ( $days <= 31 ) {
+			return 'day';
+		}
+		if ( $days <= 180 ) {
+			return 'week';
+		}
+
+		return 'month';
+	}
+
+	/**
+	 * Get SQL expressions for date grouping based on granularity.
+	 *
+	 * @param string $date_column The date column name (e.g., 'date_created').
+	 * @param string $granularity The granularity: 'day', 'week', or 'month'.
+	 * @return array Array with 'date_expr', 'label_expr', and 'group_by' keys.
+	 */
+	private static function get_date_grouping( $date_column, $granularity ) {
+		switch ( $granularity ) {
+			case 'day':
+				return array(
+					'date_expr'  => "DATE({$date_column})",
+					'label_expr' => "DATE_FORMAT({$date_column}, '%b %d')",
+					'group_by'   => "DATE({$date_column})",
+				);
+			case 'week':
+				return array(
+					'date_expr'  => "DATE(DATE_SUB({$date_column}, INTERVAL WEEKDAY({$date_column}) DAY))",
+					'label_expr' => "CONCAT('Week of ', DATE_FORMAT(DATE_SUB({$date_column}, INTERVAL WEEKDAY({$date_column}) DAY), '%b %d'))",
+					'group_by'   => "YEARWEEK({$date_column}, 1)",
+				);
+			default: // month
+				return array(
+					'date_expr'  => "DATE_FORMAT({$date_column}, '%Y-%m-01')",
+					'label_expr' => "DATE_FORMAT({$date_column}, '%M %Y')",
+					'group_by'   => "YEAR({$date_column}), MONTH({$date_column})",
+				);
+		}
+	}
+
+	/**
+	 * Calculate comparison period dates.
+	 *
+	 * @param string $start_date   Start date (Y-m-d format).
+	 * @param string $end_date     End date (Y-m-d format).
+	 * @param string $compare_type Comparison type: 'previous' or 'yoy'.
+	 * @return array Array with 'prev_start' and 'prev_end' keys.
+	 */
+	private static function get_comparison_period( $start_date, $end_date, $compare_type = 'previous' ) {
+		if ( 'yoy' === $compare_type ) {
+			return array(
+				'prev_start' => gmdate( 'Y-m-d', strtotime( $start_date . ' -1 year' ) ),
+				'prev_end'   => gmdate( 'Y-m-d', strtotime( $end_date . ' -1 year' ) ),
+			);
+		}
+
+		// Previous period: same duration immediately before start date.
+		$days      = ( strtotime( $end_date ) - strtotime( $start_date ) ) / 86400;
+		$prev_end  = gmdate( 'Y-m-d', strtotime( $start_date . ' -1 day' ) );
+		$prev_start = gmdate( 'Y-m-d', strtotime( $prev_end . ' -' . (int) $days . ' days' ) );
+
+		return array(
+			'prev_start' => $prev_start,
+			'prev_end'   => $prev_end,
+		);
+	}
+
+	// =========================
 	// CUSTOMERS AND REVENUE
 	// =========================
 
 	/**
-	 * Get new customers by month.
+	 * Get new customers grouped by time period.
 	 *
 	 * @param string $start_date Start date (Y-m-d format).
 	 * @param string $end_date   End date (Y-m-d format).
@@ -210,63 +295,94 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND date_created <= %s', $end_date );
 		}
 
+		// Use dynamic granularity based on date range.
+		$granularity = self::get_granularity( $start_date, $end_date );
+		$grouping    = self::get_date_grouping( 'date_created', $granularity );
+
 		$query = "
 			SELECT
-				DATE_FORMAT(date_created, '%Y-%m-01') AS date,
-				DATE_FORMAT(date_created, '%M %Y') AS label,
+				{$grouping['date_expr']} AS date,
+				{$grouping['label_expr']} AS label,
 				COUNT(*) AS value
 			FROM {$wpdb->prefix}edd_customers
 			WHERE date_created IS NOT NULL
 			{$where}
-			GROUP BY
-				YEAR(date_created),
-				MONTH(date_created)
+			GROUP BY {$grouping['group_by']}
 			ORDER BY date
 		";
 
-		return self::get_cached( 'customers_by_month_' . md5( $query ), $query );
+		return self::get_cached( 'customers_by_period_' . md5( $query ), $query );
 	}
 
 	/**
-	 * Get new customers YoY change.
+	 * Get new customers period comparison.
+	 *
+	 * @param string $start_date   Start date (Y-m-d format).
+	 * @param string $end_date     End date (Y-m-d format).
+	 * @param string $compare_type Comparison type: 'previous', 'yoy', or 'none'.
+	 * @return array Query results with current period, comparison period, and percent change.
+	 */
+	public static function get_new_customers_comparison( $start_date = null, $end_date = null, $compare_type = 'previous' ) {
+		$wpdb = self::get_db();
+
+		// If no dates provided, default to current year vs last year.
+		if ( ! $start_date || ! $end_date ) {
+			$start_date = gmdate( 'Y-01-01' );
+			$end_date   = gmdate( 'Y-m-d' );
+		}
+
+		// Get current period count.
+		$current_query = $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}edd_customers WHERE date_created >= %s AND date_created <= %s",
+			$start_date,
+			$end_date
+		);
+		$current_count = (int) self::get_cached( 'customers_current_' . md5( $current_query ), $current_query, 'get_var' );
+
+		// If no comparison requested.
+		if ( 'none' === $compare_type ) {
+			return array(
+				'current_period'  => $current_count,
+				'previous_period' => null,
+				'change'          => null,
+				'compare_type'    => 'none',
+			);
+		}
+
+		// Get comparison period dates.
+		$comparison = self::get_comparison_period( $start_date, $end_date, $compare_type );
+
+		// Get comparison period count.
+		$prev_query = $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}edd_customers WHERE date_created >= %s AND date_created <= %s",
+			$comparison['prev_start'],
+			$comparison['prev_end']
+		);
+		$prev_count = (int) self::get_cached( 'customers_prev_' . md5( $prev_query ), $prev_query, 'get_var' );
+
+		// Calculate change.
+		$change = $prev_count > 0 ? ( ( $current_count - $prev_count ) / $prev_count ) * 100 : 0;
+
+		return array(
+			'current_period'  => $current_count,
+			'previous_period' => $prev_count,
+			'change'          => round( $change, 2 ),
+			'compare_type'    => $compare_type,
+		);
+	}
+
+	/**
+	 * Get new customers YoY change (legacy method for backwards compatibility).
 	 *
 	 * @return array Query results with current year, last year, and percent change.
 	 */
 	public static function get_new_customers_yoy_change() {
-		$wpdb = self::get_db();
-
-		$query = "
-			SELECT
-				SUM(CASE
-					WHEN YEAR(date_created) = YEAR(CURDATE()) THEN 1
-					ELSE 0
-				END) AS current_year,
-				SUM(CASE
-					WHEN YEAR(date_created) = YEAR(CURDATE()) - 1 THEN 1
-					ELSE 0
-				END) AS last_year
-			FROM {$wpdb->prefix}edd_customers
-			WHERE YEAR(date_created) IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
-		";
-
-		$result = self::get_cached( 'customers_yoy', $query );
-
-		if ( empty( $result ) || ! isset( $result[0] ) ) {
-			return array(
-				'current_year' => 0,
-				'last_year'    => 0,
-				'change'       => 0,
-			);
-		}
-
-		$current = (int) $result[0]['current_year'];
-		$last    = (int) $result[0]['last_year'];
-		$change  = $last > 0 ? ( ( $current - $last ) / $last ) * 100 : 0;
+		$result = self::get_new_customers_comparison( gmdate( 'Y-01-01' ), gmdate( 'Y-m-d' ), 'yoy' );
 
 		return array(
-			'current_year' => $current,
-			'last_year'    => $last,
-			'change'       => round( $change, 2 ),
+			'current_year' => $result['current_period'],
+			'last_year'    => $result['previous_period'],
+			'change'       => $result['change'],
 		);
 	}
 
@@ -288,23 +404,88 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND o.date_created <= %s', $end_date );
 		}
 
+		// Use dynamic granularity based on date range.
+		$granularity = self::get_granularity( $start_date, $end_date );
+		$grouping    = self::get_date_grouping( 'o.date_created', $granularity );
+
 		$query = "
 			SELECT
-				DATE_FORMAT(o.date_created, '%Y-%m-01') AS date,
-				DATE_FORMAT(o.date_created, '%M %Y') AS label,
+				{$grouping['date_expr']} AS date,
+				{$grouping['label_expr']} AS label,
 				SUM(CASE WHEN o.type = 'sale' THEN o.total ELSE 0 END) AS new_revenue,
 				SUM(CASE WHEN o.type = 'renewal' THEN o.total ELSE 0 END) AS recurring_revenue,
 				SUM(o.total) AS total_revenue
 			FROM {$wpdb->prefix}edd_orders o
 			WHERE o.type IN ('sale', 'renewal')
 			{$where}
-			GROUP BY
-				YEAR(o.date_created),
-				MONTH(o.date_created)
+			GROUP BY {$grouping['group_by']}
 			ORDER BY date
 		";
 
-		return self::get_cached( 'revenue_by_month_' . md5( $query ), $query );
+		return self::get_cached( 'revenue_by_period_' . md5( $query ), $query );
+	}
+
+	/**
+	 * Get revenue period comparison.
+	 *
+	 * @param string $start_date   Start date (Y-m-d format).
+	 * @param string $end_date     End date (Y-m-d format).
+	 * @param string $compare_type Comparison type: 'previous', 'yoy', or 'none'.
+	 * @return array Query results with current period, comparison period, and percent change.
+	 */
+	public static function get_revenue_comparison( $start_date = null, $end_date = null, $compare_type = 'previous' ) {
+		$wpdb = self::get_db();
+
+		// If no dates provided, default to current year.
+		if ( ! $start_date || ! $end_date ) {
+			$start_date = gmdate( 'Y-01-01' );
+			$end_date   = gmdate( 'Y-m-d' );
+		}
+
+		// Get current period total.
+		$current_query = $wpdb->prepare(
+			"SELECT COALESCE(SUM(total), 0) FROM {$wpdb->prefix}edd_orders
+			WHERE type IN ('sale', 'renewal')
+			AND status IN ('complete', 'edd_subscription')
+			AND date_created >= %s AND date_created <= %s",
+			$start_date,
+			$end_date
+		);
+		$current_total = (float) self::get_cached( 'revenue_current_' . md5( $current_query ), $current_query, 'get_var' );
+
+		// If no comparison requested.
+		if ( 'none' === $compare_type ) {
+			return array(
+				'current_period'  => $current_total,
+				'previous_period' => null,
+				'change'          => null,
+				'compare_type'    => 'none',
+			);
+		}
+
+		// Get comparison period dates.
+		$comparison = self::get_comparison_period( $start_date, $end_date, $compare_type );
+
+		// Get comparison period total.
+		$prev_query = $wpdb->prepare(
+			"SELECT COALESCE(SUM(total), 0) FROM {$wpdb->prefix}edd_orders
+			WHERE type IN ('sale', 'renewal')
+			AND status IN ('complete', 'edd_subscription')
+			AND date_created >= %s AND date_created <= %s",
+			$comparison['prev_start'],
+			$comparison['prev_end']
+		);
+		$prev_total = (float) self::get_cached( 'revenue_prev_' . md5( $prev_query ), $prev_query, 'get_var' );
+
+		// Calculate change.
+		$change = $prev_total > 0 ? ( ( $current_total - $prev_total ) / $prev_total ) * 100 : 0;
+
+		return array(
+			'current_period'  => round( $current_total, 2 ),
+			'previous_period' => round( $prev_total, 2 ),
+			'change'          => round( $change, 2 ),
+			'compare_type'    => $compare_type,
+		);
 	}
 
 	/**
@@ -325,21 +506,23 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND o.date_created <= %s', $end_date );
 		}
 
+		// Use dynamic granularity based on date range.
+		$granularity = self::get_granularity( $start_date, $end_date );
+		$grouping    = self::get_date_grouping( 'o.date_created', $granularity );
+
 		$query = "
 			SELECT
-				DATE_FORMAT(o.date_created, '%Y-%m-01') AS date,
-				DATE_FORMAT(o.date_created, '%M %Y') AS label,
+				{$grouping['date_expr']} AS date,
+				{$grouping['label_expr']} AS label,
 				ABS(SUM(o.total)) AS value
 			FROM {$wpdb->prefix}edd_orders o
 			WHERE o.status = 'refunded'
 			{$where}
-			GROUP BY
-				YEAR(o.date_created),
-				MONTH(o.date_created)
+			GROUP BY {$grouping['group_by']}
 			ORDER BY date
 		";
 
-		return self::get_cached( 'refunded_revenue_' . md5( $query ), $query );
+		return self::get_cached( 'refunded_revenue_period_' . md5( $query ), $query );
 	}
 
 	// =========================
@@ -364,10 +547,14 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND s.created <= %s', $end_date );
 		}
 
+		// Use dynamic granularity based on date range.
+		$granularity = self::get_granularity( $start_date, $end_date );
+		$grouping    = self::get_date_grouping( 's.created', $granularity );
+
 		$query = "
 			SELECT
-				DATE_FORMAT(s.created, '%Y-%m-01') AS date,
-				DATE_FORMAT(s.created, '%M %Y') AS label,
+				{$grouping['date_expr']} AS date,
+				{$grouping['label_expr']} AS label,
 				COUNT(DISTINCT s.id) AS subscriptions,
 				ROUND(SUM(s.initial_amount / 12), 2) AS mrr
 			FROM {$wpdb->prefix}edd_subscriptions s
@@ -379,13 +566,11 @@ class VGP_EDD_Stats_Query {
 				WHERE ( o.parent = s.parent_payment_id OR o.id = s.parent_payment_id )
 				AND o.status = 'refunded'
 			)
-			GROUP BY
-				YEAR(s.created),
-				MONTH(s.created)
+			GROUP BY {$grouping['group_by']}
 			ORDER BY date
 		";
 
-		return self::get_cached( 'mrr_by_month_' . md5( $query ), $query );
+		return self::get_cached( 'mrr_by_period_' . md5( $query ), $query );
 	}
 
 	/**

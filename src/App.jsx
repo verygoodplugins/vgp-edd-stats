@@ -17,36 +17,38 @@ import { subDays, subMonths } from 'date-fns';
 function App({ section }) {
 	// Global date range state
 	const [dateRange, setDateRange] = useState(() => getInitialDateRange());
+	// Comparison mode state: 'previous' (default), 'yoy', or 'none'
+	const [comparisonMode, setComparisonMode] = useState('previous');
 
 	// Render appropriate page based on section
 	const renderPage = () => {
 		switch (section) {
 			case 'executive-overview':
-				return <ExecutiveOverviewPage dateRange={dateRange} />;
+				return <ExecutiveOverviewPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'customer-analytics':
-				return <CustomerAnalyticsPage dateRange={dateRange} />;
+				return <CustomerAnalyticsPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'revenue-intelligence':
-				return <RevenueIntelligencePage dateRange={dateRange} />;
+				return <RevenueIntelligencePage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'product-performance':
-				return <ProductPerformancePage dateRange={dateRange} />;
+				return <ProductPerformancePage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'subscription-analytics':
-				return <SubscriptionAnalyticsPage dateRange={dateRange} />;
+				return <SubscriptionAnalyticsPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'customers-revenue':
-				return <CustomersRevenuePage dateRange={dateRange} />;
+				return <CustomersRevenuePage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'mrr-growth':
-				return <MRRGrowthPage dateRange={dateRange} />;
+				return <MRRGrowthPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'renewals':
-				return <RenewalsPage dateRange={dateRange} />;
+				return <RenewalsPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'refunds':
-				return <RefundsPage dateRange={dateRange} />;
+				return <RefundsPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'licensing':
-				return <LicensingPage dateRange={dateRange} />;
+				return <LicensingPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'sites':
-				return <SitesPage dateRange={dateRange} />;
+				return <SitesPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			case 'support':
-				return <SupportPage dateRange={dateRange} />;
+				return <SupportPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 			default:
-				return <ExecutiveOverviewPage dateRange={dateRange} />;
+				return <ExecutiveOverviewPage dateRange={dateRange} comparisonMode={comparisonMode} />;
 		}
 	};
 
@@ -65,6 +67,8 @@ function App({ section }) {
 				<DateRangeFilter
 					dateRange={dateRange}
 					onChange={setDateRange}
+					comparisonMode={comparisonMode}
+					onComparisonChange={setComparisonMode}
 				/>
 			</div>
 

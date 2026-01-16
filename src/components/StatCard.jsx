@@ -10,6 +10,8 @@ function StatCard({
 	subtitle = null,
 	loading = false,
 	className = '',
+	invertColors = false,
+	comparisonLabel = null,
 }) {
 	const formatValue = (val) => {
 		if (loading) return '...';
@@ -26,8 +28,12 @@ function StatCard({
 	};
 
 	const getChangeColor = (changeValue) => {
-		if (changeValue > 0) return 'text-green-600';
-		if (changeValue < 0) return 'text-red-600';
+		// If invertColors is true, swap the colors (for metrics where lower is better like churn)
+		const isPositive = invertColors ? changeValue < 0 : changeValue > 0;
+		const isNegative = invertColors ? changeValue > 0 : changeValue < 0;
+
+		if (isPositive) return 'text-green-600';
+		if (isNegative) return 'text-red-600';
 		return 'text-gray-600';
 	};
 
@@ -54,7 +60,12 @@ function StatCard({
 						<div className={clsx('flex items-center mt-2 text-sm font-medium', getChangeColor(change))}>
 							<span className="mr-1">{getChangeIcon(change)}</span>
 							<span>{Math.abs(change).toFixed(1)}%</span>
-							<span className="text-gray-500 ml-2">vs previous period</span>
+							{comparisonLabel && (
+								<span className="text-gray-500 ml-2">{comparisonLabel}</span>
+							)}
+							{!comparisonLabel && (
+								<span className="text-gray-500 ml-2">vs previous period</span>
+							)}
 						</div>
 					)}
 				</div>

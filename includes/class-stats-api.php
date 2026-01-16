@@ -77,6 +77,28 @@ class VGP_EDD_Stats_API {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/customers/comparison',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_customers_comparison' ),
+				'permission_callback' => array( $this, 'check_permissions' ),
+				'args'                => $this->get_date_range_with_comparison_args(),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/revenue/comparison',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_revenue_comparison' ),
+				'permission_callback' => array( $this, 'check_permissions' ),
+				'args'                => $this->get_date_range_with_comparison_args(),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/revenue/by-month',
 			array(
 				'methods'             => 'GET',
@@ -531,6 +553,33 @@ class VGP_EDD_Stats_API {
 	}
 
 	/**
+	 * Get date range arguments with comparison support.
+	 *
+	 * @return array Arguments definition.
+	 */
+	private function get_date_range_with_comparison_args() {
+		return array(
+			'start_date' => array(
+				'default'           => null,
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => array( $this, 'validate_date' ),
+			),
+			'end_date'   => array(
+				'default'           => null,
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => array( $this, 'validate_date' ),
+			),
+			'compare_to' => array(
+				'default'           => 'previous',
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => function ( $value ) {
+					return in_array( $value, array( 'previous', 'yoy', 'none' ), true );
+				},
+			),
+		);
+	}
+
+	/**
 	 * Validate date format.
 	 *
 	 * @param string $date Date string.
@@ -582,6 +631,48 @@ class VGP_EDD_Stats_API {
 	 */
 	public function get_customers_yoy_change( $request ) {
 		$data = VGP_EDD_Stats_Query::get_new_customers_yoy_change();
+
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'data'    => $data,
+			)
+		);
+	}
+
+	/**
+	 * Get customers period comparison.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response Response object.
+	 */
+	public function get_customers_comparison( $request ) {
+		$start_date  = $request->get_param( 'start_date' );
+		$end_date    = $request->get_param( 'end_date' );
+		$compare_to  = $request->get_param( 'compare_to' );
+
+		$data = VGP_EDD_Stats_Query::get_new_customers_comparison( $start_date, $end_date, $compare_to );
+
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'data'    => $data,
+			)
+		);
+	}
+
+	/**
+	 * Get revenue period comparison.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response Response object.
+	 */
+	public function get_revenue_comparison( $request ) {
+		$start_date  = $request->get_param( 'start_date' );
+		$end_date    = $request->get_param( 'end_date' );
+		$compare_to  = $request->get_param( 'compare_to' );
+
+		$data = VGP_EDD_Stats_Query::get_revenue_comparison( $start_date, $end_date, $compare_to );
 
 		return rest_ensure_response(
 			array(
