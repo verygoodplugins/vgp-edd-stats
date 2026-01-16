@@ -23,6 +23,9 @@ function CustomersRevenuePage({ dateRange, comparisonMode = 'previous' }) {
 		queryFn: () => API.getRevenueByMonth(dateRange),
 	});
 
+	// Debug: log revenue data to verify structure
+	console.log('Revenue data:', revenueData);
+
 	// Fetch revenue comparison
 	const { data: revenueComparisonData, isLoading: revenueComparisonLoading } = useQuery({
 		queryKey: ['revenue-comparison', dateRange, comparisonMode],

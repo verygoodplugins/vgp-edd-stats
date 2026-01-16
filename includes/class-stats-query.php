@@ -412,8 +412,8 @@ class VGP_EDD_Stats_Query {
 			SELECT
 				{$grouping['date_expr']} AS date,
 				{$grouping['label_expr']} AS label,
-				SUM(CASE WHEN o.type = 'sale' THEN o.total ELSE 0 END) AS new_revenue,
-				SUM(CASE WHEN o.type = 'renewal' THEN o.total ELSE 0 END) AS recurring_revenue,
+				COALESCE(SUM(CASE WHEN o.type = 'sale' THEN o.total ELSE 0 END), 0) AS new_revenue,
+				COALESCE(SUM(CASE WHEN o.type = 'renewal' THEN o.total ELSE 0 END), 0) AS recurring_revenue,
 				SUM(o.total) AS total_revenue
 			FROM {$wpdb->prefix}edd_orders o
 			WHERE o.type IN ('sale', 'renewal')
