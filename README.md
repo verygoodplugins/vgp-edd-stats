@@ -45,32 +45,29 @@ vgp-edd-stats/
 │   ├── App.jsx
 │   └── index.jsx
 ├── build/                   # Compiled assets (generated)
-├── scripts/                 # Dev utilities (optional)
+├── scripts/                 # Dev utilities
 ├── data/                    # Local DB dumps (gitignored)
 └── vgp-edd-stats.php         # Main plugin file
 ```
 
-## Syncing Live Data to Local Development (Optional)
+## Development with Live Data
 
-The `scripts/sync-live-data.sh` script can pull EDD tables from a live site into a local dev database and anonymize customer data.
+### SSH Tunnel (Currently Not Working)
 
-### Setup
+An SSH tunnel can connect to the live database directly, but the current hosting provider has disabled SSH port forwarding.
 
-```bash
-cp scripts/.env.example scripts/.env
-chmod +x scripts/sync-live-data.sh
-./scripts/sync-live-data.sh
-```
+See `TUNNEL-ISSUE.md` for details and potential solutions.
 
-For LocalWP users, local DB host/port/user/password are usually auto-detected from your site’s `local-site.json` (or `wp-config.php`) so you typically only need to set `LIVE_SSH` + `LIVE_WP_PATH`.
+### Alternative: Dev Database Mode
 
-### Dev Database Mode
+If you have database access through another method (VPN, remote MySQL access, etc.):
 
 ```bash
 cp dev-config-sample.php dev-config.php
+# Edit dev-config.php with your database credentials
 ```
 
-When `dev-config.php` exists and `VGP_EDD_STATS_DEV_MODE` is `true`, the plugin queries the dev database for stats instead of the WordPress database.
+When `dev-config.php` exists, the plugin queries the specified database instead of the WordPress database.
 
 ## REST API Endpoints
 
@@ -111,7 +108,7 @@ All endpoints are available at `/wp-json/vgp-edd-stats/v1/`.
 Settings live under **EDD Stats → Settings**:
 
 - Cache duration (seconds)
-- Default date range (including “All Time”)
+- Default date range (including "All Time")
 - Clear cached stats
 
 ## License

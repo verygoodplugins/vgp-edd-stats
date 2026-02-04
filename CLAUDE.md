@@ -293,75 +293,25 @@ Charts use inline ECharts options. To change colors/styles globally, update the 
 
 ## Development with Live Data
 
-### Live Data Sync System
+### SSH Tunnel to Remote MySQL (Currently Not Working)
 
-The plugin includes an automated system to sync live EDD data to a local development database, enabling realistic development without production deployments.
-
-**Setup (One-time):**
-
-1. Ensure SSH key authentication is set up for the live site
-2. The `dev-config.php` file is already created from the sample (gitignored)
-3. Run the sync script:
-
-```bash
-cd /Users/jgarturo/Local\ Sites/dev/app/public/wp-content/plugins/vgp-edd-stats
-./scripts/sync-live-data.sh
-```
-
-**What the sync does:**
-
-- Connects to live site via SSH: `master_jsrfyuefqf@104.238.130.1`
-- Exports only EDD tables (customers, orders, subscriptions, licenses)
-- Downloads to local `data/` directory
-- Creates separate database: `vgp_edd_dev`
-- Anonymizes customer data for privacy:
-  - Emails: `user@example.com` → `anon_md5hash@localhost.dev`
-  - Names: `John Doe` → `Customer_12345`
-  - Preserves: All IDs, amounts, dates, transaction patterns
-- Logs sync completion with timestamp
-
-**How it works:**
-
-- When `dev-config.php` exists, the plugin automatically uses the `vgp_edd_dev` database
-- All queries transparently route to dev database via `VGP_EDD_Stats_Query::get_db()`
-- Cache keys get `_dev` suffix to prevent collisions
-- On production (no `dev-config.php`), uses normal WordPress database
-- Zero code changes needed between dev/production
-
-**Refresh data anytime:**
-
-```bash
-./scripts/sync-live-data.sh
-```
-
-**File structure:**
+**Issue:** The hosting provider has disabled SSH port forwarding, which prevents SSH tunneling. When attempting to create a tunnel, you'll see:
 
 ```
-vgp-edd-stats/
-├── scripts/
-│   ├── sync-live-data.sh       # Main sync script
-│   └── anonymize-data.sql      # Privacy protection SQL
-├── data/
-│   ├── edd-dump-*.sql          # Timestamped dumps (gitignored)
-│   └── last-sync.log           # Sync history
-├── dev-config.php              # Dev mode config (gitignored, auto-created)
-└── dev-config-sample.php       # Template (committed)
+channel 2: open failed: administratively prohibited: open failed
 ```
 
-**Development workflow:**
+This is a security setting (`AllowTcpForwarding no`) in the SSH server configuration that your hosting provider controls.
 
-1. Sync live data: `./scripts/sync-live-data.sh`
-2. Make changes to React components or PHP code
-3. Build: `npm run build`
-4. Test with real data patterns locally
-5. Deploy to production when ready
+**Possible Solutions:**
 
-**Troubleshooting:**
+1. **Contact hosting provider** to enable `AllowTcpForwarding` in SSH configuration
+2. **Use hosting control panel** to create a remote MySQL access user (if available)
+3. **Set up a VPN** with database access
+4. **Create database exports** and work with local snapshots (loses real-time data)
+5. **Develop against production** (not recommended for analytics dashboard)
 
-- **SSH fails**: Ensure SSH key authentication is configured
-- **MySQL connection fails**: Check Local WP MySQL is running (default credentials: root/root)
-- **Tables not found**: Verify EDD is active on live site
-- **Data not updating**: Re-run sync script to refresh
+**Tunnel scripts remain for reference** (in `scripts/` directory) but won't work until port forwarding is enabled.
 
 ## Known Limitations
 

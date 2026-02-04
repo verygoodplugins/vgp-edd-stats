@@ -69,48 +69,69 @@ class VGP_EDD_Stats_Query {
 	}
 
 	/**
-	 * Get database connection (dev or production).
+	 * Get database connection (dev/remote or production).
+	 *
+	 * In dev mode, connects to a remote database via SSH tunnel.
+	 * Start the tunnel with: ./scripts/start-tunnel.sh start
 	 *
 	 * @return wpdb Database connection.
 	 */
 	private static function get_db() {
-		// Return production database if not in dev mode
+		// Return production database if not in dev mode.
 		if ( ! self::is_dev_mode() ) {
 			global $wpdb;
 			return $wpdb;
 		}
 
-		// Initialize dev database connection if needed
+		// Initialize remote database connection if needed.
 		if ( null === self::$dev_db ) {
-			$db_host = defined( 'VGP_EDD_DEV_DB_HOST' ) ? VGP_EDD_DEV_DB_HOST : 'localhost';
-			$db_name = defined( 'VGP_EDD_DEV_DB_NAME' ) ? VGP_EDD_DEV_DB_NAME : 'vgp_edd_dev';
-			$db_user = defined( 'VGP_EDD_DEV_DB_USER' ) ? VGP_EDD_DEV_DB_USER : 'root';
-			$db_pass = defined( 'VGP_EDD_DEV_DB_PASSWORD' ) ? VGP_EDD_DEV_DB_PASSWORD : 'root';
+			$db_host = defined( 'VGP_EDD_DEV_DB_HOST' ) ? VGP_EDD_DEV_DB_HOST : '127.0.0.1';
+			$db_port = defined( 'VGP_EDD_DEV_DB_PORT' ) ? VGP_EDD_DEV_DB_PORT : null;
+			$db_name = defined( 'VGP_EDD_DEV_DB_NAME' ) ? VGP_EDD_DEV_DB_NAME : '';
+			$db_user = defined( 'VGP_EDD_DEV_DB_USER' ) ? VGP_EDD_DEV_DB_USER : '';
+			$db_pass = defined( 'VGP_EDD_DEV_DB_PASSWORD' ) ? VGP_EDD_DEV_DB_PASSWORD : '';
 
-			// Create new wpdb instance for dev database
-			self::$dev_db = new wpdb( $db_user, $db_pass, $db_name, $db_host );
+			// Check for required credentials.
+			if ( empty( $db_name ) || empty( $db_user ) ) {
+				error_log( 'VGP EDD Stats: Remote database credentials not configured in dev-config.php' );
+				global $wpdb;
+				return $wpdb;
+			}
 
-			// Ensure table prefix and core table names are set for this connection
+			// Append port to host if specified (MySQL connection format).
+			$connection_host = $db_host;
+			if ( $db_port ) {
+				$connection_host = $db_host . ':' . $db_port;
+			}
+
+			// Create new wpdb instance for remote database.
+			self::$dev_db = new wpdb( $db_user, $db_pass, $db_name, $connection_host );
+
+			// Set table prefix.
 			$dev_prefix = defined( 'VGP_EDD_DEV_DB_PREFIX' ) ? VGP_EDD_DEV_DB_PREFIX : 'wp_';
 			if ( method_exists( self::$dev_db, 'set_prefix' ) ) {
 				self::$dev_db->set_prefix( $dev_prefix );
 			} else {
-				self::$dev_db->prefix = $dev_prefix; // Fallback
+				self::$dev_db->prefix = $dev_prefix;
 			}
 
-				// Check if connection succeeded
-				if ( ! self::$dev_db->dbh ) {
-					// Connection failed, fall back to production database
-					error_log( 'VGP EDD Stats: Failed to connect to dev database. Falling back to production database.' );
-					if ( ! empty( self::$dev_db->last_error ) && is_string( self::$dev_db->last_error ) ) {
-						error_log( 'VGP EDD Stats: Connection error: ' . self::$dev_db->last_error );
-					} elseif ( ! empty( self::$dev_db->error ) && is_string( self::$dev_db->error ) ) {
-						error_log( 'VGP EDD Stats: Connection error: ' . self::$dev_db->error );
-					}
-					global $wpdb;
-					self::$dev_db = $wpdb;
-				} else {
-				// Set charset for dev database
+			// Check if connection succeeded.
+			if ( ! self::$dev_db->dbh ) {
+				$error_msg = 'VGP EDD Stats: Failed to connect to remote database.';
+				if ( $db_port ) {
+					$error_msg .= ' Is the SSH tunnel running? (./scripts/start-tunnel.sh start)';
+				}
+				error_log( $error_msg );
+
+				if ( ! empty( self::$dev_db->error ) && is_wp_error( self::$dev_db->error ) ) {
+					error_log( 'VGP EDD Stats: ' . self::$dev_db->error->get_error_message() );
+				}
+
+				// Fall back to production database.
+				global $wpdb;
+				self::$dev_db = $wpdb;
+			} else {
+				// Set charset for remote database.
 				self::$dev_db->set_charset( self::$dev_db->dbh );
 			}
 		}
@@ -189,96 +210,11 @@ class VGP_EDD_Stats_Query {
 	}
 
 	// =========================
-	// GRANULARITY HELPERS
-	// =========================
-
-	/**
-	 * Calculate appropriate granularity based on date range.
-	 *
-	 * @param string $start_date Start date (Y-m-d format).
-	 * @param string $end_date   End date (Y-m-d format).
-	 * @return string Granularity: 'day', 'week', or 'month'.
-	 */
-	private static function get_granularity( $start_date, $end_date ) {
-		if ( ! $start_date || ! $end_date ) {
-			return 'month'; // Default to month for unbounded queries.
-		}
-
-		$days = ( strtotime( $end_date ) - strtotime( $start_date ) ) / 86400;
-
-		if ( $days <= 31 ) {
-			return 'day';
-		}
-		if ( $days <= 180 ) {
-			return 'week';
-		}
-
-		return 'month';
-	}
-
-	/**
-	 * Get SQL expressions for date grouping based on granularity.
-	 *
-	 * @param string $date_column The date column name (e.g., 'date_created').
-	 * @param string $granularity The granularity: 'day', 'week', or 'month'.
-	 * @return array Array with 'date_expr', 'label_expr', and 'group_by' keys.
-	 */
-	private static function get_date_grouping( $date_column, $granularity ) {
-		switch ( $granularity ) {
-			case 'day':
-				return array(
-					'date_expr'  => "DATE({$date_column})",
-					'label_expr' => "DATE_FORMAT({$date_column}, '%b %d')",
-					'group_by'   => "DATE({$date_column})",
-				);
-			case 'week':
-				return array(
-					'date_expr'  => "DATE(DATE_SUB({$date_column}, INTERVAL WEEKDAY({$date_column}) DAY))",
-					'label_expr' => "CONCAT('Week of ', DATE_FORMAT(DATE_SUB({$date_column}, INTERVAL WEEKDAY({$date_column}) DAY), '%b %d'))",
-					'group_by'   => "YEARWEEK({$date_column}, 1)",
-				);
-			default: // month
-				return array(
-					'date_expr'  => "DATE_FORMAT({$date_column}, '%Y-%m-01')",
-					'label_expr' => "DATE_FORMAT({$date_column}, '%M %Y')",
-					'group_by'   => "YEAR({$date_column}), MONTH({$date_column})",
-				);
-		}
-	}
-
-	/**
-	 * Calculate comparison period dates.
-	 *
-	 * @param string $start_date   Start date (Y-m-d format).
-	 * @param string $end_date     End date (Y-m-d format).
-	 * @param string $compare_type Comparison type: 'previous' or 'yoy'.
-	 * @return array Array with 'prev_start' and 'prev_end' keys.
-	 */
-	private static function get_comparison_period( $start_date, $end_date, $compare_type = 'previous' ) {
-		if ( 'yoy' === $compare_type ) {
-			return array(
-				'prev_start' => gmdate( 'Y-m-d', strtotime( $start_date . ' -1 year' ) ),
-				'prev_end'   => gmdate( 'Y-m-d', strtotime( $end_date . ' -1 year' ) ),
-			);
-		}
-
-		// Previous period: same duration immediately before start date.
-		$days      = ( strtotime( $end_date ) - strtotime( $start_date ) ) / 86400;
-		$prev_end  = gmdate( 'Y-m-d', strtotime( $start_date . ' -1 day' ) );
-		$prev_start = gmdate( 'Y-m-d', strtotime( $prev_end . ' -' . (int) $days . ' days' ) );
-
-		return array(
-			'prev_start' => $prev_start,
-			'prev_end'   => $prev_end,
-		);
-	}
-
-	// =========================
 	// CUSTOMERS AND REVENUE
 	// =========================
 
 	/**
-	 * Get new customers grouped by time period.
+	 * Get new customers by month.
 	 *
 	 * @param string $start_date Start date (Y-m-d format).
 	 * @param string $end_date   End date (Y-m-d format).
@@ -295,94 +231,63 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND date_created <= %s', $end_date );
 		}
 
-		// Use dynamic granularity based on date range.
-		$granularity = self::get_granularity( $start_date, $end_date );
-		$grouping    = self::get_date_grouping( 'date_created', $granularity );
-
 		$query = "
 			SELECT
-				{$grouping['date_expr']} AS date,
-				{$grouping['label_expr']} AS label,
+				DATE_FORMAT(date_created, '%Y-%m-01') AS date,
+				DATE_FORMAT(date_created, '%M %Y') AS label,
 				COUNT(*) AS value
 			FROM {$wpdb->prefix}edd_customers
 			WHERE date_created IS NOT NULL
 			{$where}
-			GROUP BY {$grouping['group_by']}
+			GROUP BY
+				YEAR(date_created),
+				MONTH(date_created)
 			ORDER BY date
 		";
 
-		return self::get_cached( 'customers_by_period_' . md5( $query ), $query );
+		return self::get_cached( 'customers_by_month_' . md5( $query ), $query );
 	}
 
 	/**
-	 * Get new customers period comparison.
-	 *
-	 * @param string $start_date   Start date (Y-m-d format).
-	 * @param string $end_date     End date (Y-m-d format).
-	 * @param string $compare_type Comparison type: 'previous', 'yoy', or 'none'.
-	 * @return array Query results with current period, comparison period, and percent change.
-	 */
-	public static function get_new_customers_comparison( $start_date = null, $end_date = null, $compare_type = 'previous' ) {
-		$wpdb = self::get_db();
-
-		// If no dates provided, default to current year vs last year.
-		if ( ! $start_date || ! $end_date ) {
-			$start_date = gmdate( 'Y-01-01' );
-			$end_date   = gmdate( 'Y-m-d' );
-		}
-
-		// Get current period count.
-		$current_query = $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->prefix}edd_customers WHERE date_created >= %s AND date_created <= %s",
-			$start_date,
-			$end_date
-		);
-		$current_count = (int) self::get_cached( 'customers_current_' . md5( $current_query ), $current_query, 'get_var' );
-
-		// If no comparison requested.
-		if ( 'none' === $compare_type ) {
-			return array(
-				'current_period'  => $current_count,
-				'previous_period' => null,
-				'change'          => null,
-				'compare_type'    => 'none',
-			);
-		}
-
-		// Get comparison period dates.
-		$comparison = self::get_comparison_period( $start_date, $end_date, $compare_type );
-
-		// Get comparison period count.
-		$prev_query = $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->prefix}edd_customers WHERE date_created >= %s AND date_created <= %s",
-			$comparison['prev_start'],
-			$comparison['prev_end']
-		);
-		$prev_count = (int) self::get_cached( 'customers_prev_' . md5( $prev_query ), $prev_query, 'get_var' );
-
-		// Calculate change.
-		$change = $prev_count > 0 ? ( ( $current_count - $prev_count ) / $prev_count ) * 100 : 0;
-
-		return array(
-			'current_period'  => $current_count,
-			'previous_period' => $prev_count,
-			'change'          => round( $change, 2 ),
-			'compare_type'    => $compare_type,
-		);
-	}
-
-	/**
-	 * Get new customers YoY change (legacy method for backwards compatibility).
+	 * Get new customers YoY change.
 	 *
 	 * @return array Query results with current year, last year, and percent change.
 	 */
 	public static function get_new_customers_yoy_change() {
-		$result = self::get_new_customers_comparison( gmdate( 'Y-01-01' ), gmdate( 'Y-m-d' ), 'yoy' );
+		$wpdb = self::get_db();
+
+		$query = "
+			SELECT
+				SUM(CASE
+					WHEN YEAR(date_created) = YEAR(CURDATE()) THEN 1
+					ELSE 0
+				END) AS current_year,
+				SUM(CASE
+					WHEN YEAR(date_created) = YEAR(CURDATE()) - 1 THEN 1
+					ELSE 0
+				END) AS last_year
+			FROM {$wpdb->prefix}edd_customers
+			WHERE YEAR(date_created) IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+		";
+
+		$result = self::get_cached( 'customers_yoy', $query );
+
+		if ( empty( $result ) || ! isset( $result[0] ) ) {
+			return array(
+				'current_year' => 0,
+				'last_year'    => 0,
+				'change'       => 0,
+			);
+		}
+
+		$current = (int) $result[0]['current_year'];
+		$last    = (int) $result[0]['last_year'];
+		$change  = $last > 0 ? ( ( $current - $last ) / $last ) * 100 : 0;
 
 		return array(
-			'current_year' => $result['current_period'],
-			'last_year'    => $result['previous_period'],
-			'change'       => $result['change'],
+			'current_year' => $current,
+			'last_year'    => $last,
+			'change'       => round( $change, 2 ),
 		);
 	}
 
@@ -404,88 +309,23 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND o.date_created <= %s', $end_date );
 		}
 
-		// Use dynamic granularity based on date range.
-		$granularity = self::get_granularity( $start_date, $end_date );
-		$grouping    = self::get_date_grouping( 'o.date_created', $granularity );
-
 		$query = "
 			SELECT
-				{$grouping['date_expr']} AS date,
-				{$grouping['label_expr']} AS label,
-				COALESCE(SUM(CASE WHEN o.type = 'sale' THEN o.total ELSE 0 END), 0) AS new_revenue,
-				COALESCE(SUM(CASE WHEN o.type = 'renewal' THEN o.total ELSE 0 END), 0) AS recurring_revenue,
+				DATE_FORMAT(o.date_created, '%Y-%m-01') AS date,
+				DATE_FORMAT(o.date_created, '%M %Y') AS label,
+				SUM(CASE WHEN o.type = 'sale' THEN o.total ELSE 0 END) AS new_revenue,
+				SUM(CASE WHEN o.type = 'renewal' THEN o.total ELSE 0 END) AS recurring_revenue,
 				SUM(o.total) AS total_revenue
 			FROM {$wpdb->prefix}edd_orders o
 			WHERE o.type IN ('sale', 'renewal')
 			{$where}
-			GROUP BY {$grouping['group_by']}
+			GROUP BY
+				YEAR(o.date_created),
+				MONTH(o.date_created)
 			ORDER BY date
 		";
 
-		return self::get_cached( 'revenue_by_period_' . md5( $query ), $query );
-	}
-
-	/**
-	 * Get revenue period comparison.
-	 *
-	 * @param string $start_date   Start date (Y-m-d format).
-	 * @param string $end_date     End date (Y-m-d format).
-	 * @param string $compare_type Comparison type: 'previous', 'yoy', or 'none'.
-	 * @return array Query results with current period, comparison period, and percent change.
-	 */
-	public static function get_revenue_comparison( $start_date = null, $end_date = null, $compare_type = 'previous' ) {
-		$wpdb = self::get_db();
-
-		// If no dates provided, default to current year.
-		if ( ! $start_date || ! $end_date ) {
-			$start_date = gmdate( 'Y-01-01' );
-			$end_date   = gmdate( 'Y-m-d' );
-		}
-
-		// Get current period total.
-		$current_query = $wpdb->prepare(
-			"SELECT COALESCE(SUM(total), 0) FROM {$wpdb->prefix}edd_orders
-			WHERE type IN ('sale', 'renewal')
-			AND status IN ('complete', 'edd_subscription')
-			AND date_created >= %s AND date_created <= %s",
-			$start_date,
-			$end_date
-		);
-		$current_total = (float) self::get_cached( 'revenue_current_' . md5( $current_query ), $current_query, 'get_var' );
-
-		// If no comparison requested.
-		if ( 'none' === $compare_type ) {
-			return array(
-				'current_period'  => $current_total,
-				'previous_period' => null,
-				'change'          => null,
-				'compare_type'    => 'none',
-			);
-		}
-
-		// Get comparison period dates.
-		$comparison = self::get_comparison_period( $start_date, $end_date, $compare_type );
-
-		// Get comparison period total.
-		$prev_query = $wpdb->prepare(
-			"SELECT COALESCE(SUM(total), 0) FROM {$wpdb->prefix}edd_orders
-			WHERE type IN ('sale', 'renewal')
-			AND status IN ('complete', 'edd_subscription')
-			AND date_created >= %s AND date_created <= %s",
-			$comparison['prev_start'],
-			$comparison['prev_end']
-		);
-		$prev_total = (float) self::get_cached( 'revenue_prev_' . md5( $prev_query ), $prev_query, 'get_var' );
-
-		// Calculate change.
-		$change = $prev_total > 0 ? ( ( $current_total - $prev_total ) / $prev_total ) * 100 : 0;
-
-		return array(
-			'current_period'  => round( $current_total, 2 ),
-			'previous_period' => round( $prev_total, 2 ),
-			'change'          => round( $change, 2 ),
-			'compare_type'    => $compare_type,
-		);
+		return self::get_cached( 'revenue_by_month_' . md5( $query ), $query );
 	}
 
 	/**
@@ -506,23 +346,21 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND o.date_created <= %s', $end_date );
 		}
 
-		// Use dynamic granularity based on date range.
-		$granularity = self::get_granularity( $start_date, $end_date );
-		$grouping    = self::get_date_grouping( 'o.date_created', $granularity );
-
 		$query = "
 			SELECT
-				{$grouping['date_expr']} AS date,
-				{$grouping['label_expr']} AS label,
+				DATE_FORMAT(o.date_created, '%Y-%m-01') AS date,
+				DATE_FORMAT(o.date_created, '%M %Y') AS label,
 				ABS(SUM(o.total)) AS value
 			FROM {$wpdb->prefix}edd_orders o
 			WHERE o.status = 'refunded'
 			{$where}
-			GROUP BY {$grouping['group_by']}
+			GROUP BY
+				YEAR(o.date_created),
+				MONTH(o.date_created)
 			ORDER BY date
 		";
 
-		return self::get_cached( 'refunded_revenue_period_' . md5( $query ), $query );
+		return self::get_cached( 'refunded_revenue_' . md5( $query ), $query );
 	}
 
 	// =========================
@@ -547,14 +385,10 @@ class VGP_EDD_Stats_Query {
 			$where .= $wpdb->prepare( ' AND s.created <= %s', $end_date );
 		}
 
-		// Use dynamic granularity based on date range.
-		$granularity = self::get_granularity( $start_date, $end_date );
-		$grouping    = self::get_date_grouping( 's.created', $granularity );
-
 		$query = "
 			SELECT
-				{$grouping['date_expr']} AS date,
-				{$grouping['label_expr']} AS label,
+				DATE_FORMAT(s.created, '%Y-%m-01') AS date,
+				DATE_FORMAT(s.created, '%M %Y') AS label,
 				COUNT(DISTINCT s.id) AS subscriptions,
 				ROUND(SUM(s.initial_amount / 12), 2) AS mrr
 			FROM {$wpdb->prefix}edd_subscriptions s
@@ -566,11 +400,13 @@ class VGP_EDD_Stats_Query {
 				WHERE ( o.parent = s.parent_payment_id OR o.id = s.parent_payment_id )
 				AND o.status = 'refunded'
 			)
-			GROUP BY {$grouping['group_by']}
+			GROUP BY
+				YEAR(s.created),
+				MONTH(s.created)
 			ORDER BY date
 		";
 
-		return self::get_cached( 'mrr_by_period_' . md5( $query ), $query );
+		return self::get_cached( 'mrr_by_month_' . md5( $query ), $query );
 	}
 
 	/**
@@ -630,59 +466,58 @@ class VGP_EDD_Stats_Query {
 	 * @param string $end_date   End date.
 	 * @return array Query results.
 	 */
-    public static function get_renewal_rates_by_month( $start_date = null, $end_date = null ) {
-        $wpdb = self::get_db();
+	public static function get_renewal_rates_by_month( $start_date = null, $end_date = null ) {
+		$wpdb = self::get_db();
 
-        // Optional filter based on renewal month (12 months after signup)
-        $renewal_window = (int) self::RENEWAL_WINDOW_MONTHS;
-        $filter = '';
-        if ( $start_date ) {
-            $filter .= $wpdb->prepare(
-                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL %d MONTH), '%%Y-%%m') >= %s",
-                $renewal_window,
-                substr( $start_date, 0, 7 )
-            );
-        }
-        if ( $end_date ) {
-            $filter .= $wpdb->prepare(
-                " AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL %d MONTH), '%%Y-%%m') <= %s",
-                $renewal_window,
-                substr( $end_date, 0, 7 )
-            );
-        }
+		$renewal_window_months = (int) self::RENEWAL_WINDOW_MONTHS;
+		$renewalWindowFilter = '';
+		if ( $start_date ) {
+			$renewalWindowFilter .= $wpdb->prepare(
+				" AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL %d MONTH), '%%Y-%%m') >= %s",
+				$renewal_window_months,
+				substr( $start_date, 0, 7 )
+			);
+		}
+		if ( $end_date ) {
+			$renewalWindowFilter .= $wpdb->prepare(
+				" AND DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL %d MONTH), '%%Y-%%m') <= %s",
+				$renewal_window_months,
+				substr( $end_date, 0, 7 )
+			);
+		}
 
-        $renewal_window_plus_one = $renewal_window + 1;
-        $cutoff_date = self::HISTORICAL_DATA_CUTOFF_DATE;
-        $threshold = (float) self::EXCLUSION_PURCHASE_VALUE_THRESHOLD;
-        
-        $query = "
-            SELECT
-                renewal_month AS month_year,
-                DATE_FORMAT(STR_TO_DATE(CONCAT(renewal_month, '-01'), '%Y-%m-%d'), '%M %Y') AS label,
-                ROUND(AVG(renewal_rate), 2) AS renewal_rate
-            FROM (
-                SELECT
-                    DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL {$renewal_window} MONTH), '%Y-%m') AS renewal_month,
-                    100.0 * COUNT(DISTINCT CASE
-                        WHEN o.status IN ('complete','edd_subscription')
-                         AND o.date_created >= DATE_ADD(c.date_created, INTERVAL {$renewal_window} MONTH)
-                         AND o.date_created <  DATE_ADD(c.date_created, INTERVAL {$renewal_window_plus_one} MONTH)
-                         THEN o.customer_id END)
-                    / NULLIF(COUNT(DISTINCT c.id), 0) AS renewal_rate
-                FROM {$wpdb->prefix}edd_customers c
-                LEFT JOIN {$wpdb->prefix}edd_orders o ON c.id = o.customer_id
-                WHERE c.date_created >= '{$cutoff_date}'
-                  AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL {$renewal_window} MONTH)
-                  AND NOT (c.purchase_count = 1 AND c.purchase_value >= {$threshold})
-                  {$filter}
-                GROUP BY DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL {$renewal_window} MONTH), '%Y-%m')
-            ) AS r
-            GROUP BY renewal_month
-            ORDER BY renewal_month
-        ";
+		$renewal_window_plus_one = $renewal_window_months + 1;
+		$cutoff_date = self::HISTORICAL_DATA_CUTOFF_DATE;
+		$threshold = (float) self::EXCLUSION_PURCHASE_VALUE_THRESHOLD;
 
-        return self::get_cached( 'renewal_rates_' . md5( $query ), $query );
-    }
+		$query = "
+			SELECT
+				renewal_month AS month_year,
+				DATE_FORMAT(STR_TO_DATE(CONCAT(renewal_month, '-01'), '%Y-%m-%d'), '%M %Y') AS label,
+				ROUND(AVG(renewal_rate), 2) AS renewal_rate
+			FROM (
+				SELECT
+					DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL {$renewal_window_months} MONTH), '%Y-%m') AS renewal_month,
+					100.0 * COUNT(DISTINCT CASE
+						WHEN o.status IN ('complete','edd_subscription')
+						 AND o.date_created >= DATE_ADD(c.date_created, INTERVAL {$renewal_window_months} MONTH)
+						 AND o.date_created <  DATE_ADD(c.date_created, INTERVAL {$renewal_window_plus_one} MONTH)
+						 THEN o.customer_id END)
+					/ NULLIF(COUNT(DISTINCT c.id), 0) AS renewal_rate
+				FROM {$wpdb->prefix}edd_customers c
+				LEFT JOIN {$wpdb->prefix}edd_orders o ON c.id = o.customer_id
+				WHERE c.date_created >= '{$cutoff_date}'
+				  AND c.date_created <= DATE_SUB(CURDATE(), INTERVAL {$renewal_window_months} MONTH)
+				  AND NOT (c.purchase_count = 1 AND c.purchase_value >= {$threshold})
+				  {$renewalWindowFilter}
+				GROUP BY DATE_FORMAT(DATE_ADD(c.date_created, INTERVAL {$renewal_window_months} MONTH), '%Y-%m')
+			) AS r
+			GROUP BY renewal_month
+			ORDER BY renewal_month
+		";
+
+		return self::get_cached( 'renewal_rates_' . md5( $query ), $query );
+	}
 
 	/**
 	 * Get upcoming renewals.
@@ -694,15 +529,7 @@ class VGP_EDD_Stats_Query {
 		$wpdb = self::get_db();
 
 		$query = $wpdb->prepare(
-			"
-			SELECT
-				COUNT(DISTINCT id) AS count,
-				ROUND(SUM(recurring_amount), 2) AS estimated_revenue
-			FROM {$wpdb->prefix}edd_subscriptions
-			WHERE status = 'active'
-			AND expiration >= CURDATE()
-			AND expiration <= DATE_ADD(CURDATE(), INTERVAL %d DAY)
-			",
+			"SELECT COUNT(DISTINCT id) AS count, ROUND(SUM(recurring_amount), 2) AS estimated_revenue FROM {$wpdb->prefix}edd_subscriptions WHERE status = 'active' AND expiration >= CURDATE() AND expiration <= DATE_ADD(CURDATE(), INTERVAL %d DAY)",
 			$days
 		);
 
@@ -2792,5 +2619,121 @@ class VGP_EDD_Stats_Query {
 		";
 
 		return self::get_cached( 'seasonal_patterns', $query );
+	}
+
+	// =========================
+	// COMPARISON METHODS
+	// =========================
+
+	/**
+	 * Get new customers comparison between current and previous period.
+	 *
+	 * @param string $start_date  Start date for current period.
+	 * @param string $end_date    End date for current period.
+	 * @param string $compare_to  Comparison type: 'previous' or 'year_ago'.
+	 * @return array Comparison data with current_period, previous_period, and change.
+	 */
+	public static function get_new_customers_comparison( $start_date, $end_date, $compare_to = 'previous' ) {
+		$wpdb = self::get_db();
+
+		// Calculate the previous period dates.
+		$current_start = new DateTime( $start_date );
+		$current_end   = new DateTime( $end_date );
+		$interval      = $current_start->diff( $current_end );
+
+		if ( 'year_ago' === $compare_to ) {
+			$prev_start = ( clone $current_start )->modify( '-1 year' )->format( 'Y-m-d' );
+			$prev_end   = ( clone $current_end )->modify( '-1 year' )->format( 'Y-m-d' );
+		} else {
+			$prev_end   = ( clone $current_start )->modify( '-1 day' )->format( 'Y-m-d' );
+			$prev_start = ( clone $current_start )->sub( $interval )->modify( '-1 day' )->format( 'Y-m-d' );
+		}
+
+		// Query current period.
+		$current_query = $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}edd_customers WHERE date_created >= %s AND date_created <= %s",
+			$start_date,
+			$end_date
+		);
+		$current_count = (int) self::get_cached( 'customers_comparison_current_' . md5( $current_query ), $current_query, 'get_var' );
+
+		// Query previous period.
+		$prev_query = $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}edd_customers WHERE date_created >= %s AND date_created <= %s",
+			$prev_start,
+			$prev_end
+		);
+		$prev_count = (int) self::get_cached( 'customers_comparison_prev_' . md5( $prev_query ), $prev_query, 'get_var' );
+
+		// Calculate change percentage.
+		$change = 0;
+		if ( $prev_count > 0 ) {
+			$change = round( ( ( $current_count - $prev_count ) / $prev_count ) * 100, 2 );
+		}
+
+		return array(
+			'current_period'  => $current_count,
+			'previous_period' => $prev_count,
+			'change'          => $change,
+		);
+	}
+
+	/**
+	 * Get revenue comparison between current and previous period.
+	 *
+	 * @param string $start_date  Start date for current period.
+	 * @param string $end_date    End date for current period.
+	 * @param string $compare_to  Comparison type: 'previous' or 'year_ago'.
+	 * @return array Comparison data with current_period, previous_period, and change.
+	 */
+	public static function get_revenue_comparison( $start_date, $end_date, $compare_to = 'previous' ) {
+		$wpdb = self::get_db();
+
+		// Calculate the previous period dates.
+		$current_start = new DateTime( $start_date );
+		$current_end   = new DateTime( $end_date );
+		$interval      = $current_start->diff( $current_end );
+
+		if ( 'year_ago' === $compare_to ) {
+			$prev_start = ( clone $current_start )->modify( '-1 year' )->format( 'Y-m-d' );
+			$prev_end   = ( clone $current_end )->modify( '-1 year' )->format( 'Y-m-d' );
+		} else {
+			$prev_end   = ( clone $current_start )->modify( '-1 day' )->format( 'Y-m-d' );
+			$prev_start = ( clone $current_start )->sub( $interval )->modify( '-1 day' )->format( 'Y-m-d' );
+		}
+
+		// Query current period revenue.
+		$current_query = $wpdb->prepare(
+			"SELECT COALESCE(SUM(total), 0) FROM {$wpdb->prefix}edd_orders
+			WHERE type IN ('sale', 'renewal')
+			AND status IN ('complete', 'edd_subscription')
+			AND date_created >= %s AND date_created <= %s",
+			$start_date,
+			$end_date
+		);
+		$current_revenue = (float) self::get_cached( 'revenue_comparison_current_' . md5( $current_query ), $current_query, 'get_var' );
+
+		// Query previous period revenue.
+		$prev_query = $wpdb->prepare(
+			"SELECT COALESCE(SUM(total), 0) FROM {$wpdb->prefix}edd_orders
+			WHERE type IN ('sale', 'renewal')
+			AND status IN ('complete', 'edd_subscription')
+			AND date_created >= %s AND date_created <= %s",
+			$prev_start,
+			$prev_end
+		);
+		$prev_revenue = (float) self::get_cached( 'revenue_comparison_prev_' . md5( $prev_query ), $prev_query, 'get_var' );
+
+		// Calculate change percentage.
+		$change = 0;
+		if ( $prev_revenue > 0 ) {
+			$change = round( ( ( $current_revenue - $prev_revenue ) / $prev_revenue ) * 100, 2 );
+		}
+
+		return array(
+			'current_period'  => round( $current_revenue, 2 ),
+			'previous_period' => round( $prev_revenue, 2 ),
+			'change'          => $change,
+		);
 	}
 }
